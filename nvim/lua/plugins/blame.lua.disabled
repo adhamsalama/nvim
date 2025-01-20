@@ -1,0 +1,49 @@
+return {
+  "FabijanZulj/blame.nvim",
+  cmd = "BlameToggle",
+  opts = {
+    date_format = "%d.%m.%Y",
+    merge_consecutive = true,
+    virtual_style = "right_align",
+    views = {
+      virtual = require "blame.views.virtual_view",
+      --  default = require "blame.views.virtual_view",
+    },
+    --max_summary_width = 1,
+    ---@type FormatFn
+    format_fn = function(line_porcelain, _config, idx)
+      -- Create a custom format with commit message, date, and author
+      local commit_date = os.date("%Y-%m-%d", line_porcelain.author_time) -- Format the commit date
+      local author_name = line_porcelain.author -- Get the author name
+      local commit_message = string.sub(line_porcelain.summary, 1, 20) -- Get the commit message
+
+      -- Return the formatted line with proper highlighting
+      return {
+        idx = idx,
+        values = {
+          { textValue = commit_message, hl = "Type" },
+          { textValue = commit_date .. " ", hl = "Comment" },
+          { textValue = " " .. author_name, hl = "Type" },
+        },
+        format = "%s %s %s",
+      }
+    end,
+  },
+  dependencies = {
+    {
+      "AstroNvim/astrocore",
+      ---@type AstroCoreOpts
+      opts = {
+        mappings = {
+          n = {
+            ["<Leader>gB"] = {
+              "<cmd>BlameToggle<cr>",
+              desc = "Toggle git blame",
+            },
+          },
+        },
+      },
+    },
+    { "AstroNvim/astroui", opts = { status = { winbar = { enabled = { filetype = { "blame" } } } } } },
+  },
+}
