@@ -12,8 +12,8 @@ return {
   { import = "astrocommunity.pack.typescript" },
   { import = "astrocommunity.pack.go" },
   -- { import = "astrocommunity.pack.java" },
-  -- { import = "astrocommunity.pack.python" },
-  -- { import = "astrocommunity.pack.rust" },
+  { import = "astrocommunity.pack.python" },
+  { import = "astrocommunity.pack.rust" },
   -- Programming related stuff
   -- { import = "astrocommunity.git.blame-nvim" },
   -- { import = "astrocommunity.git.git-blame-nvim" },
