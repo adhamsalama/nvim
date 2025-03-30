@@ -18,7 +18,7 @@
   "diffview.nvim": { "branch": "main", "commit": "4516612fe98ff56ae0415a259ff6361a89419b0a" },
   "everforest": { "branch": "master", "commit": "29d1f4f8b63dc91db277e977068f912939c8cae8" },
   "friendly-snippets": { "branch": "main", "commit": "efff286dd74c22f731cdec26a70b46e5b203c619" },
-  "gitgraph.nvim": { "branch": "main", "commit": "4f7765862c90477b4ac6bf56e33f1993600e1c9f" },
+  "gitgraph.nvim": { "branch": "main", "commit": "a40e99b4b46d387d30c9dd88c401c9c9ebd13918" },
   "gitsigns.nvim": { "branch": "main", "commit": "7010000889bfb6c26065e0b0f7f1e6aa9163edd9" },
   "gopher.nvim": { "branch": "main", "commit": "ea28fc4e6fd9edd4556b3431199c6112cfdb9c65" },
   "goto-preview": { "branch": "main", "commit": "cd49bcf6a853512fce46f035fe95469e5b2d26c7" },
