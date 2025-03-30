@@ -1,13 +1,24 @@
 return {
   "sindrets/diffview.nvim",
   keys = {
-    { "<leader>gd", "<cmd>DiffviewOpen<cr>", desc = "Open Git Diff View" },
-    { "<leader>gC", "<cmd>DiffviewClose<cr>", desc = "Close Diff View" },
-    { "<leader>gh", "<cmd>DiffviewFileHistory<cr>", desc = "Repo History" },
-    { "<leader>gH", "<cmd>DiffviewFileHistory %<cr>", desc = "File History" },
-    { "<leader>gT", "<cmd>DiffviewFileHistory -g --range=stash<cr>", desc = "Stash" },
+    { "<leader>gd", "<Nop>", desc = "Diffview" },
+    { "<leader>gdd", "<cmd>DiffviewOpen<cr>", desc = "Diff view" },
+    { "<leader>gdf", "<cmd>DiffviewFileHistory %<cr>", desc = "File History" },
+    { "<leader>gdh", "<cmd>DiffviewFileHistory<cr>", desc = "Repo History" },
+    { "<leader>gds", "<cmd>DiffviewFileHistory -g --range=stash<cr>", desc = "View Stash" },
+    -- { "<leader>gdm", "<cmd>DiffviewOpen origin/HEAD...HEAD --imply-local<cr>", desc = "Review" },
     {
-      "<leader>gL",
+      "<leader>gdr",
+      function()
+        vim.ui.input({ prompt = "Enter branch to compare (leave empty for origin/HEAD): " }, function(branch)
+          local target = (branch and branch ~= "") and ("origin/" .. branch) or "origin/HEAD"
+          vim.cmd("DiffviewOpen " .. target .. "...HEAD --imply-local")
+        end)
+      end,
+      desc = "Review",
+    },
+    {
+      "<leader>gdc",
       function()
         -- Run `git blame` on the current line and extract the commit hash
         local line_num = vim.fn.line "." -- Get the current line number
@@ -29,7 +40,43 @@ return {
         -- vim.cmd("DiffviewFileHistory -r " .. commit_hash .. "^!" .. " " .. file_path)
         -- vim.cmd("DiffviewFileHistory --range=" .. commit_hash .. " -1 " .. file_path)
       end,
-      desc = "Full Blame",
+      desc = "Diff commit of line",
     },
   },
+  opts = function(_, opts)
+    local actions = require "diffview.actions"
+
+    opts.keymaps = {
+      view = {
+        ["<leader>b"] = false, -- Focus files panel in Diffview
+        { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
+        -- ["<leader>e"] = actions.toggle_files, -- Focus files panel in Diffview
+      },
+      file_panel = {
+        ["<leader>b"] = false, -- Focus files panel in Diffview
+        { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
+        -- ["<leader>e"] = actions.toggle_files,
+      },
+      file_history_panel = {
+        ["<leader>b"] = false, -- Focus files panel in Diffview
+        { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
+        -- ["<leader>e"] = actions.toggle_files,
+      },
+      diff1 = {
+        ["<leader>b"] = false, -- Focus files panel in Diffview
+        { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
+        -- ["<leader>e"] = actions.toggle_files, -- Focus files panel in Diffview
+      },
+      diff2 = {
+        ["<leader>b"] = false, -- Focus files panel in Diffview
+        { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
+        -- ["<leader>e"] = actions.toggle_files, -- Focus files panel in Diffview
+      },
+      diff3 = {
+        ["<leader>b"] = false, -- Focus files panel in Diffview
+        { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
+        -- ["<leader>e"] = actions.toggle_files, -- Focus files panel in Diffview
+      },
+    }
+  end,
 }
