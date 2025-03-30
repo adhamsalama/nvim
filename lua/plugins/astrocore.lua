@@ -72,6 +72,7 @@ return {
           desc = "Close tab",
         },
         ["<Leader>gT"] = false,
+        ["<leader>gC"] = { "<cmd>Git commit<cr>", desc = "Git Commit" },
         -- tables with just a `desc` key will be registered with which-key if it's installed
         -- this is useful for naming menus
         -- ["<Leader>b"] = { desc = "Buffers" },
