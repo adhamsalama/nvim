@@ -1,24 +1,24 @@
 return {
   "sindrets/diffview.nvim",
   keys = {
-    { "<leader>gd", "<Nop>", desc = "Diffview" },
-    { "<leader>gdd", "<cmd>DiffviewOpen<cr>", desc = "Diff view" },
-    { "<leader>gdf", "<cmd>DiffviewFileHistory %<cr>", desc = "File History" },
-    { "<leader>gdh", "<cmd>DiffviewFileHistory<cr>", desc = "Repo History" },
-    { "<leader>gds", "<cmd>DiffviewFileHistory -g --range=stash<cr>", desc = "View Stash" },
+    -- { "<leader>gd", "<Nop>", desc = "Diffview" },
+    { "<leader>gd", "<cmd>DiffviewOpen --imply-local<cr>", desc = "Diff" },
+    { "<leader>gf", "<cmd>DiffviewFileHistory %<cr>", desc = "File History" },
+    { "<leader>gh", "<cmd>DiffviewFileHistory<cr>", desc = "Repo History" },
+    { "<leader>gt", "<cmd>DiffviewFileHistory -g --range=stash<cr>", desc = "View Stash" },
     -- { "<leader>gdm", "<cmd>DiffviewOpen origin/HEAD...HEAD --imply-local<cr>", desc = "Review" },
     {
-      "<leader>gdr",
+      "<leader>gD",
       function()
         vim.ui.input({ prompt = "Enter branch to compare (leave empty for origin/HEAD): " }, function(branch)
           local target = (branch and branch ~= "") and ("origin/" .. branch) or "origin/HEAD"
           vim.cmd("DiffviewOpen " .. target .. "...HEAD --imply-local")
         end)
       end,
-      desc = "Review",
+      desc = "Diff branch",
     },
     {
-      "<leader>gdc",
+      "<leader>gc",
       function()
         -- Run `git blame` on the current line and extract the commit hash
         local line_num = vim.fn.line "." -- Get the current line number
