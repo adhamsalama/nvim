@@ -3,8 +3,9 @@ return {
   keys = {
     { "<leader>gd", "<cmd>DiffviewOpen<cr>", desc = "Open Git Diff View" },
     { "<leader>gC", "<cmd>DiffviewClose<cr>", desc = "Close Diff View" },
-    { "<leader>gh", "<cmd>DiffviewFileHistory<cr>", desc = "Open Repo History" },
-    { "<leader>gH", "<cmd>DiffviewFileHistory %<cr>", desc = "Open File History" },
+    { "<leader>gh", "<cmd>DiffviewFileHistory<cr>", desc = "Repo History" },
+    { "<leader>gH", "<cmd>DiffviewFileHistory %<cr>", desc = "File History" },
+    { "<leader>gT", "<cmd>DiffviewFileHistory -g --range=stash<cr>", desc = "Stash" },
     {
       "<leader>gL",
       function()
