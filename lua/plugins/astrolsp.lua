@@ -1,4 +1,4 @@
-if true then return {} end -- WARN: REMOVE THIS LINE TO ACTIVATE THIS FILE
+-- if true then return {} end -- WARN: REMOVE THIS LINE TO ACTIVATE THIS FILE
 
 -- AstroLSP allows you to customize the features in AstroNvim's LSP configuration engine
 -- Configuration documentation can be found with `:h astrolsp`
@@ -13,7 +13,7 @@ return {
     -- Configuration table of features provided by AstroLSP
     features = {
       codelens = true, -- enable/disable codelens refresh on start
-      inlay_hints = false, -- enable/disable inlay hints on start
+      inlay_hints = true, -- enable/disable inlay hints on start
       semantic_tokens = true, -- enable/disable semantic token highlighting
     },
     -- customize lsp formatting options
@@ -78,28 +78,28 @@ return {
       },
     },
     -- mappings to be set up on attaching of a language server
-    mappings = {
-      n = {
-        -- a `cond` key can provided as the string of a server capability to be required to attach, or a function with `client` and `bufnr` parameters from the `on_attach` that returns a boolean
-        gD = {
-          function() vim.lsp.buf.declaration() end,
-          desc = "Declaration of current symbol",
-          cond = "textDocument/declaration",
-        },
-        ["<Leader>uY"] = {
-          function() require("astrolsp.toggles").buffer_semantic_tokens() end,
-          desc = "Toggle LSP semantic highlight (buffer)",
-          cond = function(client)
-            return client.supports_method "textDocument/semanticTokens/full" and vim.lsp.semantic_tokens ~= nil
-          end,
-        },
-      },
-    },
+    -- mappings = {
+    --   n = {
+    --     -- a `cond` key can provided as the string of a server capability to be required to attach, or a function with `client` and `bufnr` parameters from the `on_attach` that returns a boolean
+    --     gD = {
+    --       function() vim.lsp.buf.declaration() end,
+    --       desc = "Declaration of current symbol",
+    --       cond = "textDocument/declaration",
+    --     },
+    --     ["<Leader>uY"] = {
+    --       function() require("astrolsp.toggles").buffer_semantic_tokens() end,
+    --       desc = "Toggle LSP semantic highlight (buffer)",
+    --       cond = function(client)
+    --         return client.supports_method "textDocument/semanticTokens/full" and vim.lsp.semantic_tokens ~= nil
+    --       end,
+    --     },
+    --   },
+    -- },
     -- A custom `on_attach` function to be run after the default `on_attach` function
     -- takes two parameters `client` and `bufnr`  (`:h lspconfig-setup`)
-    on_attach = function(client, bufnr)
-      -- this would disable semanticTokensProvider for all clients
-      -- client.server_capabilities.semanticTokensProvider = nil
-    end,
+    -- on_attach = function(client, bufnr)
+    --   -- this would disable semanticTokensProvider for all clients
+    --   -- client.server_capabilities.semanticTokensProvider = nil
+    -- end,
   },
 }
