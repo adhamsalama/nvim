@@ -15,6 +15,7 @@ return {
   { import = "astrocommunity.pack.python" },
   { import = "astrocommunity.pack.rust" },
   -- Programming related stuff
+  { import = "astrocommunity.pack.full-dadbod" },
   -- { import = "astrocommunity.git.blame-nvim" },
   -- { import = "astrocommunity.git.git-blame-nvim" },
   -- { import = "astrocommunity.git.fugit2-nvim" },
