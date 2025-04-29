@@ -31,20 +31,20 @@ return {
 
     -- Define key mappings under <leader>lg
     local keymaps = {
-      ["<leader>lgD"] = { function() require("goto-preview").goto_preview_declaration() end, "Preview Declaration" },
-      ["<leader>lgP"] = { function() require("goto-preview").close_all_win() end, "Close Preview Windows" },
-      ["<leader>lgd"] = { function() require("goto-preview").goto_preview_definition() end, "Preview Definition" },
-      ["<leader>lgi"] = {
+      ["gLD"] = { function() require("goto-preview").goto_preview_declaration() end, "Preview Declaration" },
+      ["gLP"] = { function() require("goto-preview").close_all_win() end, "Close Preview Windows" },
+      ["gLd"] = { function() require("goto-preview").goto_preview_definition() end, "Preview Definition" },
+      ["gLi"] = {
         function() require("goto-preview").goto_preview_implementation() end,
         "Preview Implementation",
       },
-      ["<leader>lgr"] = { function() require("goto-preview").goto_preview_references() end, "Preview References" },
-      ["<leader>lgt"] = {
+      ["gLr"] = { function() require("goto-preview").goto_preview_references() end, "Preview References" },
+      ["gLt"] = {
         function() require("goto-preview").goto_preview_type_definition() end,
         "Preview Type Definition",
       },
     }
-    vim.keymap.set("n", "<leader>lg", "<Nop>", { desc = "LSP & Goto Preview" })
+    vim.keymap.set("n", "gL", "<Nop>", { desc = "LSP & Goto Preview" })
     -- Register keymaps
     for key, map in pairs(keymaps) do
       vim.keymap.set("n", key, map[1], { desc = map[2], silent = true })
