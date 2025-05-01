@@ -27,4 +27,5 @@ return {
   -- { import = "astrocommunity.colorscheme.onedarkpro-nvim" },
   { import = "astrocommunity.colorscheme.everforest" },
   { import = "astrocommunity.colorscheme.gruvbox-nvim" },
+  { import = "astrocommunity.recipes.telescope-nvim-snacks" },
 }
