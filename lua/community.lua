@@ -11,6 +11,7 @@ return {
   { import = "astrocommunity.pack.lua" },
   { import = "astrocommunity.pack.typescript" },
   { import = "astrocommunity.pack.go" },
+  { import = "astrocommunity.pack.golangci-lint" },
   -- { import = "astrocommunity.pack.java" },
   { import = "astrocommunity.pack.python" },
   { import = "astrocommunity.pack.rust" },
