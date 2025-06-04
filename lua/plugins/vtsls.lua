@@ -11,6 +11,11 @@ return {
               maxInlayHintLength = 30,
             },
           },
+          typescript = {
+            tsserver = {
+              maxTsServerMemory = 8192, -- 8GB
+            },
+          },
         },
       },
     },
