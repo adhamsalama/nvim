@@ -34,4 +34,5 @@ return {
 
   { import = "astrocommunity.quickfix.nvim-bqf" },
   { import = "astrocommunity.search.grug-far-nvim" },
+  { import = "astrocommunity.scrolling.neoscroll-nvim" },
 }
