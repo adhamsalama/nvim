@@ -8,4 +8,11 @@ return {
     },
   },
   cmd = { "GrugFar" },
+  config = function()
+    require("grug-far").setup {
+      showCompactInputs = true,
+      showInputsTopPadding = false,
+      showInputsBottomPadding = false,
+    }
+  end,
 }
