@@ -13,7 +13,7 @@ return {
       override = {},
     },
     messages = {
-      enabled = false,
+      enabled = true,
     },
     notify = {
       enabled = false,
