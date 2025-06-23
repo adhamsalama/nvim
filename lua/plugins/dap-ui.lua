@@ -4,13 +4,13 @@ return {
     opts.layouts = {
       {
         elements = {
-          { id = "scopes", size = 0.25 },
-          { id = "breakpoints", size = 0.25 },
-          { id = "stacks", size = 0.25 },
-          { id = "watches", size = 0.25 },
+          { id = "scopes", size = 0.70 },
+          { id = "stacks", size = 0.20 },
+          { id = "breakpoints", size = 0.05 },
+          { id = "watches", size = 0.05 },
         },
         position = "right",
-        size = 40,
+        size = 20,
       },
       {
         elements = {
@@ -18,7 +18,7 @@ return {
           { id = "console", size = 0.25 },
         },
         position = "bottom", -- Keep REPL & Console at the bottom
-        size = 10,
+        size = 5,
       },
     }
     return opts
