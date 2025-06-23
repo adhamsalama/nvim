@@ -27,23 +27,9 @@ return {
       },
     },
     keys = {
-      {
-        "<leader>a",
-        desc = "AI",
-        mode = "n",
-      },
-      {
-        "<leader>ac",
-        "<cmd>CodeCompanionChat<CR>",
-        desc = "Chat",
-        mode = "n",
-      },
-      {
-        "<leader>ah",
-        "<cmd>CodeCompanionHistory<CR>",
-        desc = "History",
-        mode = "n",
-      },
+      { "<leader>aC", desc = "CodeCompanion", mode = "n" },
+      { "<leader>aCc", "<cmd>CodeCompanionChat<CR>", desc = "Chat", mode = "n" },
+      { "<leader>aCh", "<cmd>CodeCompanionHistory<CR>", desc = "History", mode = "n" },
     },
   },
 }
