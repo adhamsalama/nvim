@@ -1,14 +1,16 @@
 return {
   "GeorgesAlkhouri/nvim-aider",
   cmd = "Aider",
-  aider_cmd = "aider",
-  args = {
-    "--model",
-    "openai/gpt-4.1",
-    "--watch",
-    "--no-auto-commits",
-    -- "--pretty",
-    -- "--stream",
+  opts = {
+    aider_cmd = "aider",
+    args = {
+      "--model",
+      "openai/gpt-4.1",
+      "--watch",
+      "--no-auto-commits",
+      -- "--pretty",
+      -- "--stream",
+    },
   },
   -- Example key mappings for common actions:
   keys = {
