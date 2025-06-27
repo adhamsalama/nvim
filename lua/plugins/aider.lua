@@ -6,6 +6,8 @@ return {
     args = {
       "--model",
       "openai/gpt-4.1",
+      "--editor-model",
+      "openai/gpt-4.1",
       "--watch",
       "--no-auto-commits",
       -- "--pretty",
