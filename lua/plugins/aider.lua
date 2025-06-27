@@ -11,6 +11,11 @@ return {
       -- "--pretty",
       -- "--stream",
     },
+    win = {
+      wo = { winbar = "Aider" },
+      style = "nvim_aider",
+      position = "bottom",
+    },
   },
   -- Example key mappings for common actions:
   keys = {
