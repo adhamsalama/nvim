@@ -48,7 +48,7 @@ return {
         commit = "*",
       },
       format = {
-        timestamp = "%H:%M:%S %d-%m-%Y",
+        timestamp = "%a, %d %b %Y, %I:%M:%S %p",
         fields = { "hash", "author", "timestamp", "branch_name", "tag" },
       },
 
