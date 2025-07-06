@@ -68,7 +68,7 @@ return {
     keys = {
       {
         "<leader>gv",
-        function() require("gitgraph").draw({}, { max_count = 500 }) end,
+        function() require("gitgraph").draw({}, {}) end,
         desc = "GitGraph - Draw",
       },
     },
