@@ -66,16 +66,82 @@ return {
         ["<leader>b"] = false, -- Focus files panel in Diffview
         { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
         -- ["<leader>e"] = actions.toggle_files, -- Focus files panel in Diffview
+
+        {
+          "n",
+          "<leader>gmO",
+          function() actions.conflict_choose "ours" end,
+          { desc = "Choose OURS version (merge)" },
+        },
+        {
+          "n",
+          "<leader>gmT",
+          function()
+            vim.notify("Choose THEIRS version (merge)", vim.log.levels.INFO)
+            actions.conflict_choose "theirs"()
+          end,
+          { desc = "Choose THEIRS version (merge)" },
+        },
+        {
+          "n",
+          "<leader>gmB",
+          function() actions.conflict_choose "base" end,
+          { desc = "Choose BASE version (merge)" },
+        },
       },
       diff2 = {
         ["<leader>b"] = false, -- Focus files panel in Diffview
         { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
         -- ["<leader>e"] = actions.toggle_files, -- Focus files panel in Diffview
+
+        {
+          "n",
+          "<leader>gmO",
+          function() actions.conflict_choose "ours" end,
+          { desc = "Choose OURS version (merge)" },
+        },
+        {
+          "n",
+          "<leader>gmT",
+          function()
+            vim.notify("Choose THEIRS version (merge)", vim.log.levels.INFO)
+            actions.conflict_choose "theirs"()
+          end,
+          { desc = "Choose THEIRS version (merge)" },
+        },
+        {
+          "n",
+          "<leader>gmB",
+          function() actions.conflict_choose "base" end,
+          { desc = "Choose BASE version (merge)" },
+        },
       },
       diff3 = {
         ["<leader>b"] = false, -- Focus files panel in Diffview
         { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
         -- ["<leader>e"] = actions.toggle_files, -- Focus files panel in Diffview
+
+        {
+          "n",
+          "<leader>gmO",
+          function() actions.conflict_choose "ours" end,
+          { desc = "Choose OURS version (merge)" },
+        },
+        {
+          "n",
+          "<leader>gmT",
+          function()
+            vim.notify("Choose THEIRS version (merge)", vim.log.levels.INFO)
+            actions.conflict_choose "theirs"()
+          end,
+          { desc = "Choose THEIRS version (merge)" },
+        },
+        {
+          "n",
+          "<leader>gmB",
+          function() actions.conflict_choose "base" end,
+          { desc = "Choose BASE version (merge)" },
+        },
       },
     }
   end,
