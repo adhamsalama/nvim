@@ -1,6 +1,7 @@
 return {
   "GeorgesAlkhouri/nvim-aider",
   cmd = "Aider",
+  enabled = false,
   opts = {
     aider_cmd = "aider",
     args = {
