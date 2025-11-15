@@ -40,6 +40,7 @@ return {
     -- enable servers that you already have installed without mason
     servers = {
       -- "pyright"
+      "tsgo",
     },
     -- customize language server configuration options passed to `lspconfig`
     ---@diagnostic disable: missing-fields
@@ -54,6 +55,39 @@ return {
       -- the key is the server that is being setup with `lspconfig`
       -- rust_analyzer = false, -- setting a handler to false will disable the set up of that language server
       -- pyright = function(_, opts) require("lspconfig").pyright.setup(opts) end -- or a custom handler function can be passed
+
+      -- Register and setup tsgo LSP server
+      tsgo = function(_, opts)
+        require("lspconfig.configs").tsgo = {
+          default_config = vim.tbl_deep_extend("force", require("lspconfig.util").default_config, {
+            cmd = { "tsgo", "--lsp", "--stdio" },
+            filetypes = {
+              "javascript",
+              "javascriptreact",
+              "javascript.jsx",
+              "typescript",
+              "typescriptreact",
+              "typescript.tsx",
+            },
+            root_dir = require("lspconfig.util").root_pattern("tsconfig.json", "jsconfig.json", "package.json", ".git"),
+            init_options = {
+              preferences = {
+                includeInlayParameterNameHints = "all",
+                includeInlayParameterNameHintsWhenArgumentMatchesName = true,
+                includeInlayFunctionParameterTypeHints = true,
+                includeInlayVariableTypeHints = true,
+                includeInlayPropertyDeclarationTypeHints = true,
+                includeInlayFunctionLikeReturnTypeHints = true,
+                includeInlayEnumMemberValueHints = true,
+              },
+            },
+          }),
+        }
+        require("lspconfig").tsgo.setup(opts)
+      end,
+
+      -- Disable TypeScript/JavaScript LSP servers
+      vtsls = false,
     },
     -- Configure buffer local auto commands to add when attaching a language server
     autocmds = {
