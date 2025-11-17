@@ -92,8 +92,10 @@ vim.api.nvim_create_autocmd("FileType", {
         vim.fn.setqflist({}, "r", { items = items })
       end
 
-      -- Adjust cursor position if we deleted the last line
-      if line > vim.fn.line "$" then vim.cmd "normal! k" end
+      -- Restore cursor position
+      local new_last_line = vim.fn.line "$"
+      local target_line = math.min(line, new_last_line)
+      vim.fn.cursor(target_line, 0)
     end, { buffer = event.buf, desc = "Delete quickfix/location list entry" })
   end,
 })
