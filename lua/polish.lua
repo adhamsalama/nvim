@@ -61,3 +61,32 @@ _G.qftextfunc_no_col = function(info)
   end
   return ret
 end
+
+-- Add keymap to delete quickfix/location list entries with "dd"
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "qf",
+  callback = function(event)
+    vim.keymap.set("n", "dd", function()
+      -- Get current line number
+      local line = vim.fn.line "."
+
+      -- Check if this is a location list or quickfix list
+      local is_loclist = vim.fn.getloclist(0, { filewinid = 0 }).filewinid ~= 0
+
+      if is_loclist then
+        -- Location list
+        local items = vim.fn.getloclist(0, { items = 0 }).items
+        table.remove(items, line)
+        vim.fn.setloclist(0, {}, "r", { items = items })
+      else
+        -- Quickfix list
+        local items = vim.fn.getqflist({ items = 0 }).items
+        table.remove(items, line)
+        vim.fn.setqflist({}, "r", { items = items })
+      end
+
+      -- Adjust cursor position if we deleted the last line
+      if line > vim.fn.line "$" then vim.cmd "normal! k" end
+    end, { buffer = event.buf, desc = "Delete quickfix/location list entry" })
+  end,
+})
