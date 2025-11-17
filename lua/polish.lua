@@ -41,7 +41,14 @@ _G.qftextfunc_no_col = function(info)
         if fname == "" then
           fname = "[No Name]"
         else
-          fname = fname:gsub("^" .. vim.env.HOME, "~")
+          -- Make path relative to current working directory
+          local cwd = vim.fn.getcwd()
+          if fname:sub(1, #cwd) == cwd then
+            fname = fname:sub(#cwd + 2) -- +2 to skip the trailing slash
+          else
+            -- Fallback to home directory substitution if not in cwd
+            fname = fname:gsub("^" .. vim.env.HOME, "~")
+          end
         end
       end
 
