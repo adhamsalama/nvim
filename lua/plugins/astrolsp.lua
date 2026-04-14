@@ -112,6 +112,15 @@ return {
       },
     },
     -- mappings to be set up on attaching of a language server
+    mappings = {
+      n = {
+        gi = {
+          function() vim.lsp.buf.implementation() end,
+          desc = "Go to implementation",
+          cond = "textDocument/implementation",
+        },
+      },
+    },
     -- mappings = {
     --   n = {
     --     -- a `cond` key can provided as the string of a server capability to be required to attach, or a function with `client` and `bufnr` parameters from the `on_attach` that returns a boolean
