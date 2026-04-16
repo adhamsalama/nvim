@@ -53,6 +53,11 @@ return {
       linematch = 60,
     }
 
+    -- Apply to Neovim's internal diff engine (used for rendering)
+    vim.opt.diffopt:append "algorithm:histogram"
+    vim.opt.diffopt:append "indent-heuristic"
+    vim.opt.diffopt:append "linematch:60"
+
     -- Everforest-compatible diff colors (yellow/green tints instead of blue)
     vim.api.nvim_create_autocmd("ColorScheme", {
       pattern = "*",
