@@ -46,6 +46,25 @@ return {
   opts = function(_, opts)
     local actions = require "diffview.actions"
 
+    opts.enhanced_diff_hl = true
+    opts.diff_opts = {
+      algorithm = "histogram",
+      indent_heuristic = true,
+      linematch = 60,
+    }
+
+    -- Everforest-compatible diff colors (yellow/green tints instead of blue)
+    vim.api.nvim_create_autocmd("ColorScheme", {
+      pattern = "*",
+      callback = function()
+        vim.api.nvim_set_hl(0, "DiffChange", { bg = "#3d4220" })
+        vim.api.nvim_set_hl(0, "DiffText", { bg = "#5c6a2e", bold = true })
+      end,
+    })
+    -- Apply immediately for current session
+    vim.api.nvim_set_hl(0, "DiffChange", { bg = "#3d4220" })
+    vim.api.nvim_set_hl(0, "DiffText", { bg = "#5c6a2e", bold = true })
+
     opts.keymaps = {
       view = {
         ["<leader>b"] = false, -- Focus files panel in Diffview
