@@ -104,6 +104,23 @@ return {
         ["<leader>b"] = false, -- Focus files panel in Diffview
         { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
         -- ["<leader>e"] = actions.toggle_files,
+        {
+          "n",
+          "gd",
+          function()
+            -- Extract commit hash from current line in file history panel
+            -- Format: M | 0      1 | b4d22d45 Merge branch...
+            local line = vim.fn.getline "."
+            -- Match the commit hash after the second pipe: | ... | HASH
+            local commit_hash = line:match "|%s*[%w%s]*|%s*(%x+)"
+            if commit_hash and #commit_hash >= 7 then
+              vim.cmd("DiffviewOpen " .. commit_hash .. "^!")
+            else
+              vim.notify("Could not find commit hash on this line", vim.log.levels.WARN)
+            end
+          end,
+          { desc = "Open commit in diffview" },
+        },
       },
       diff1 = {
         ["<leader>b"] = false, -- Focus files panel in Diffview
