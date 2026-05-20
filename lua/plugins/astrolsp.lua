@@ -58,32 +58,38 @@ return {
 
       -- Register and setup tsgo LSP server
       tsgo = function(_, opts)
-        require("lspconfig.configs").tsgo = {
-          default_config = vim.tbl_deep_extend("force", require("lspconfig.util").default_config, {
-            cmd = { "tsgo", "--lsp", "--stdio" },
-            filetypes = {
-              "javascript",
-              "javascriptreact",
-              "javascript.jsx",
-              "typescript",
-              "typescriptreact",
-              "typescript.tsx",
+        local config = {
+          cmd = { "tsgo", "--lsp", "--stdio" },
+          filetypes = {
+            "javascript",
+            "javascriptreact",
+            "javascript.jsx",
+            "typescript",
+            "typescriptreact",
+            "typescript.tsx",
+          },
+          init_options = {
+            preferences = {
+              includeInlayParameterNameHints = "all",
+              includeInlayParameterNameHintsWhenArgumentMatchesName = true,
+              includeInlayFunctionParameterTypeHints = true,
+              includeInlayVariableTypeHints = true,
+              includeInlayPropertyDeclarationTypeHints = true,
+              includeInlayFunctionLikeReturnTypeHints = true,
+              includeInlayEnumMemberValueHints = true,
             },
-            root_dir = require("lspconfig.util").root_pattern("tsconfig.json", "jsconfig.json", "package.json", ".git"),
-            init_options = {
-              preferences = {
-                includeInlayParameterNameHints = "all",
-                includeInlayParameterNameHintsWhenArgumentMatchesName = true,
-                includeInlayFunctionParameterTypeHints = true,
-                includeInlayVariableTypeHints = true,
-                includeInlayPropertyDeclarationTypeHints = true,
-                includeInlayFunctionLikeReturnTypeHints = true,
-                includeInlayEnumMemberValueHints = true,
-              },
-            },
-          }),
+          },
         }
-        require("lspconfig").tsgo.setup(opts)
+        if vim.fn.has("nvim-0.12") == 1 then
+          config.root_markers = { "tsconfig.json", "jsconfig.json", "package.json", ".git" }
+          vim.lsp.config("tsgo", vim.tbl_deep_extend("force", config, opts or {}))
+          vim.lsp.enable("tsgo")
+        else
+          local lsputil = require("lspconfig.util")
+          config.root_dir = lsputil.root_pattern("tsconfig.json", "jsconfig.json", "package.json", ".git")
+          require("lspconfig.configs").tsgo = { default_config = config }
+          require("lspconfig").tsgo.setup(opts or {})
+        end
       end,
 
       -- Disable TypeScript/JavaScript LSP servers
