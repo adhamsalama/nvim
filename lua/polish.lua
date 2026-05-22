@@ -83,8 +83,28 @@ vim.keymap.set("n", "<leader>fq", function()
     table.insert(lists, { nr = i, title = list.title, size = list.size, hint = hint, marker = marker })
   end
 
+  local conf = require("telescope.config").values
+  local previewer = require("telescope.previewers").new_buffer_previewer({
+    title = "Preview",
+    define_preview = function(self, entry)
+      local list = vim.fn.getqflist({ nr = entry.value.nr, items = 0 })
+      local first = list.items and list.items[1]
+      if not first or first.bufnr == 0 then return end
+      local filename = vim.fn.bufname(first.bufnr)
+      if filename == "" then return end
+      conf.buffer_previewer_maker(filename, self.state.bufnr, {
+        bufname = self.state.bufname,
+        winid = self.state.winid,
+        callback = function()
+          pcall(vim.api.nvim_win_set_cursor, self.state.winid, { first.lnum, first.col })
+        end,
+      })
+    end,
+  })
+
   require("telescope.pickers").new({}, {
     prompt_title = "Quickfix History",
+    previewer = previewer,
     finder = require("telescope.finders").new_table({
       results = lists,
       entry_maker = function(entry)
