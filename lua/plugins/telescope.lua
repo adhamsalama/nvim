@@ -8,7 +8,32 @@ return {
     local conf = require("telescope.config").values
     local builtin = require "telescope.builtin"
 
-    telescope.setup {}
+    telescope.setup {
+      defaults = {
+        mappings = {
+          i = {
+            ["<C-q>"] = function(prompt_bufnr)
+              local actions = require "telescope.actions"
+              local action_state = require "telescope.actions.state"
+              local picker = action_state.get_current_picker(prompt_bufnr)
+              local items = {}
+              for entry in picker.manager:iter() do
+                table.insert(items, {
+                  bufnr = entry.bufnr,
+                  filename = entry.filename,
+                  lnum = entry.lnum or 1,
+                  col = entry.col or 1,
+                  text = entry.text or entry.display or "",
+                })
+              end
+              actions.close(prompt_bufnr)
+              vim.fn.setqflist({}, " ", { title = picker.prompt_title, items = items })
+              vim.cmd "copen"
+            end,
+          },
+        },
+      },
+    }
 
     vim.api.nvim_create_user_command(
       "TelescopeFunctionsOnly",
