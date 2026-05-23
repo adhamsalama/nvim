@@ -85,7 +85,7 @@ do
     javascript = [[
       (function_declaration name: (identifier) @name)
       (method_definition name: (property_identifier) @name)
-      (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression) (object)])
+      (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression)])
     ]],
     go = [[
       (function_declaration name: (identifier) @name)
@@ -95,7 +95,7 @@ do
   }
   query_strs.typescript = query_strs.javascript
     .. [[
-    (public_field_definition name: (property_identifier) @name value: [(arrow_function) (function_expression) (object)])
+    (public_field_definition name: (property_identifier) @name value: [(arrow_function) (function_expression)])
   ]]
   query_strs.tsx = query_strs.typescript
 
