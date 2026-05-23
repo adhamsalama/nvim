@@ -69,6 +69,37 @@ _G.qftextfunc_no_col = function(info)
   return ret
 end
 
+-- Truncate long inlay hints for tsgo to prevent multi-line wrapping
+do
+  local max_len = 40
+  local orig = vim.lsp.handlers["textDocument/inlayHint"]
+  vim.lsp.handlers["textDocument/inlayHint"] = function(err, result, ctx, config)
+    local client = vim.lsp.get_client_by_id(ctx.client_id)
+    if client and client.name == "tsgo" and result then
+      for _, hint in ipairs(result) do
+        if type(hint.label) == "string" then
+          if #hint.label > max_len then hint.label = hint.label:sub(1, max_len) .. "…" end
+        elseif type(hint.label) == "table" then
+          local total = 0
+          for i, part in ipairs(hint.label) do
+            local val = part.value or ""
+            if total >= max_len then
+              hint.label[i].value = ""
+            elseif total + #val > max_len then
+              hint.label[i].value = val:sub(1, max_len - total) .. "…"
+              for j = i + 1, #hint.label do hint.label[j].value = "" end
+              break
+            else
+              total = total + #val
+            end
+          end
+        end
+      end
+    end
+    return orig(err, result, ctx, config)
+  end
+end
+
 -- LSP reference counts shown as virtual lines above functions
 do
   local ns = vim.api.nvim_create_namespace "lsp_ref_count"
