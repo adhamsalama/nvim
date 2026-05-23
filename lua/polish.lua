@@ -85,16 +85,17 @@ do
     javascript = [[
       (function_declaration name: (identifier) @name)
       (method_definition name: (property_identifier) @name)
-      (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression)])
+      (variable_declarator name: (identifier) @name value: [(arrow_function) (function_expression) (object)])
     ]],
     go = [[
       (function_declaration name: (identifier) @name)
       (method_declaration name: (field_identifier) @name)
+      (type_declaration (type_spec name: (type_identifier) @name type: (struct_type)))
     ]],
   }
   query_strs.typescript = query_strs.javascript
     .. [[
-    (public_field_definition name: (property_identifier) @name value: [(arrow_function) (function_expression)])
+    (public_field_definition name: (property_identifier) @name value: [(arrow_function) (function_expression) (object)])
   ]]
   query_strs.tsx = query_strs.typescript
 
@@ -109,6 +110,7 @@ do
   end
 
   local enabled = true
+  local tokens = {}
 
   local function refresh(bufnr)
     bufnr = bufnr or vim.api.nvim_get_current_buf()
@@ -127,6 +129,8 @@ do
     local query = get_query(lang)
     if not query then return end
 
+    local token = {}
+    tokens[bufnr] = token
     vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 
     for _, node in query:iter_captures(tree:root(), bufnr, 0, -1) do
@@ -137,9 +141,19 @@ do
         position = { line = row, character = col },
         context = { includeDeclaration = false },
       }
-      vim.lsp.buf_request(bufnr, "textDocument/references", params, function(err, result)
-        if err or not result or not vim.api.nvim_buf_is_valid(bufnr) then return end
-        local count = #result
+      vim.lsp.buf_request_all(bufnr, "textDocument/references", params, function(results)
+        if tokens[bufnr] ~= token or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        local seen = {}
+        local count = 0
+        for _, res in pairs(results) do
+          for _, ref in ipairs(res.result or {}) do
+            local key = (ref.uri or "") .. ref.range.start.line .. ":" .. ref.range.start.character
+            if not seen[key] then
+              seen[key] = true
+              count = count + 1
+            end
+          end
+        end
         local label = count == 1 and "1 reference" or (count .. " references")
         local padding = string.rep(" ", indent)
         vim.api.nvim_buf_set_extmark(bufnr, ns, row, 0, {
@@ -159,7 +173,15 @@ do
     end, 600)
   end
 
-  vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "InsertLeave" }, {
+  vim.api.nvim_create_autocmd("BufEnter", {
+    callback = function(args)
+      if not filetypes[vim.bo[args.buf].filetype] then return end
+      local marks = vim.api.nvim_buf_get_extmarks(args.buf, ns, 0, -1, { limit = 1 })
+      if #marks == 0 then schedule_refresh(args.buf) end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufWritePost", "InsertLeave" }, {
     callback = function(args)
       if filetypes[vim.bo[args.buf].filetype] then schedule_refresh(args.buf) end
     end,
