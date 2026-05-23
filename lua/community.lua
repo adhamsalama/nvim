@@ -30,7 +30,6 @@ return {
   { import = "astrocommunity.colorscheme.everforest" },
   { import = "astrocommunity.colorscheme.gruvbox-nvim" },
   { import = "astrocommunity.recipes.telescope-nvim-snacks" },
-  { import = "astrocommunity.programming-language-support.rest-nvim" },
 
   { import = "astrocommunity.quickfix.nvim-bqf" },
   { import = "astrocommunity.search.grug-far-nvim" },
