@@ -112,7 +112,7 @@ return {
             -- Format: M | 0      1 | b4d22d45 Merge branch...
             local line = vim.fn.getline "."
             -- Match the commit hash after the second pipe: | ... | HASH
-            local commit_hash = line:match "|%s*[%w%s]*|%s*(%x+)"
+            local commit_hash = line:match "|[^|]*|%s*(%x+)"
             if commit_hash and #commit_hash >= 7 then
               vim.cmd("DiffviewOpen " .. commit_hash .. "^!")
             else
