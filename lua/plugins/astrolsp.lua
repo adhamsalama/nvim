@@ -57,8 +57,8 @@ return {
       -- pyright = function(_, opts) require("lspconfig").pyright.setup(opts) end -- or a custom handler function can be passed
 
       -- Register and setup tsgo LSP server
-      tsgo = function(_, opts)
-        local config = {
+      tsgo = function(server, opts)
+        vim.lsp.config(server, vim.tbl_deep_extend("force", {
           cmd = { "tsgo", "--lsp", "--stdio" },
           filetypes = {
             "javascript",
@@ -68,6 +68,7 @@ return {
             "typescriptreact",
             "typescript.tsx",
           },
+          root_markers = { "tsconfig.json", "jsconfig.json", "package.json", ".git" },
           init_options = {
             preferences = {
               includeInlayParameterNameHints = "all",
@@ -79,17 +80,8 @@ return {
               includeInlayEnumMemberValueHints = true,
             },
           },
-        }
-        if vim.fn.has("nvim-0.12") == 1 then
-          config.root_markers = { "tsconfig.json", "jsconfig.json", "package.json", ".git" }
-          vim.lsp.config("tsgo", vim.tbl_deep_extend("force", config, opts or {}))
-          vim.lsp.enable("tsgo")
-        else
-          local lsputil = require("lspconfig.util")
-          config.root_dir = lsputil.root_pattern("tsconfig.json", "jsconfig.json", "package.json", ".git")
-          require("lspconfig.configs").tsgo = { default_config = config }
-          require("lspconfig").tsgo.setup(opts or {})
-        end
+        }, opts or {}))
+        vim.lsp.enable(server)
       end,
 
       -- Disable TypeScript/JavaScript LSP servers
