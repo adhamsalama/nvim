@@ -140,7 +140,7 @@ do
     return queries[lang]
   end
 
-  local enabled = true
+  local enabled = false
   local tokens = {}
 
   local function refresh(bufnr)
