@@ -87,7 +87,9 @@ do
               hint.label[i].value = ""
             elseif total + #val > max_len then
               hint.label[i].value = val:sub(1, max_len - total) .. "…"
-              for j = i + 1, #hint.label do hint.label[j].value = "" end
+              for j = i + 1, #hint.label do
+                hint.label[j].value = ""
+              end
               break
             else
               total = total + #val
@@ -224,7 +226,11 @@ do
     end,
   })
 
-  vim.api.nvim_create_user_command("RefCountRefresh", function() refresh() end, { desc = "Refresh LSP reference counts" })
+  vim.api.nvim_create_user_command(
+    "RefCountRefresh",
+    function() refresh() end,
+    { desc = "Refresh LSP reference counts" }
+  )
 
   vim.keymap.set("n", "<leader>lt", function()
     enabled = not enabled

@@ -29,6 +29,11 @@ return {
           prev = false, -- same
         },
       },
+      filetypes = {
+        ["*"] = function()
+          return not vim.fn.expand("%:t"):match("^%.env")
+        end,
+      },
     },
     specs = {
       {
