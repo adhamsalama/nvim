@@ -35,4 +35,5 @@ return {
   { import = "astrocommunity.search.grug-far-nvim" },
   { import = "astrocommunity.scrolling.neoscroll-nvim" },
   { import = "astrocommunity.recipes.heirline-vscode-winbar" },
+  { import = "astrocommunity.recipes.heirline-mode-text-statusline" },
 }
