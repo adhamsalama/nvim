@@ -40,6 +40,45 @@ return {
         -- This can be found in the `lua/lazy_setup.lua` file
       },
     },
+    -- User commands
+    commands = {
+      LspRestart = {
+        function(event)
+          local name = event.args ~= "" and event.args or nil
+          local clients = vim.lsp.get_clients(name and { name = name } or nil)
+          if #clients == 0 then
+            vim.notify(
+              name and ("No active LSP client named '" .. name .. "'") or "No active LSP clients",
+              vim.log.levels.WARN
+            )
+            return
+          end
+          -- remember each client's name and attached buffers so we can re-enable them
+          local names = {}
+          for _, client in ipairs(clients) do
+            names[client.name] = true
+          end
+          -- stop the clients, then re-enable once they've fully exited
+          vim.lsp.stop_client(clients)
+          vim.defer_fn(function()
+            for client_name in pairs(names) do
+              vim.lsp.enable(client_name, false)
+              vim.lsp.enable(client_name, true)
+            end
+            vim.notify("Restarted LSP: " .. table.concat(vim.tbl_keys(names), ", "), vim.log.levels.INFO)
+          end, 500)
+        end,
+        desc = "Restart active LSP clients (all, or a named one)",
+        nargs = "?",
+        complete = function(arg)
+          local names = {}
+          for _, client in ipairs(vim.lsp.get_clients()) do
+            if client.name:find(arg, 1, true) == 1 then table.insert(names, client.name) end
+          end
+          return names
+        end,
+      },
+    },
     -- Mappings can be configured through AstroCore as well.
     -- NOTE: keycodes follow the casing in the vimdocs. For example, `<Leader>` must be capitalized
     mappings = {
