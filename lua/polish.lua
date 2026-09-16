@@ -69,13 +69,13 @@ _G.qftextfunc_no_col = function(info)
   return ret
 end
 
--- Truncate long inlay hints for tsgo to prevent multi-line wrapping
+-- Truncate long inlay hints for tsc to prevent multi-line wrapping
 do
   local max_len = 40
   local orig = vim.lsp.handlers["textDocument/inlayHint"]
   vim.lsp.handlers["textDocument/inlayHint"] = function(err, result, ctx, config)
     local client = vim.lsp.get_client_by_id(ctx.client_id)
-    if client and client.name == "tsgo" and result then
+    if client and client.name == "tsc" and result then
       for _, hint in ipairs(result) do
         if type(hint.label) == "string" then
           if #hint.label > max_len then hint.label = hint.label:sub(1, max_len) .. "…" end

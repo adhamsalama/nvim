@@ -40,12 +40,46 @@ return {
     -- enable servers that you already have installed without mason
     servers = {
       -- "pyright"
-      "tsgo",
+      "tsc",
     },
     -- customize language server configuration options passed to `lspconfig`
     ---@diagnostic disable: missing-fields
     config = {
       -- clangd = { capabilities = { offsetEncoding = "utf-8" } },
+
+      -- TypeScript 7 native compiler.
+      -- NOTE: nvim-lspconfig ships an `lsp/tsc.lua`, but only on `master`; AstroNvim's
+      -- lazy_snapshot pins lspconfig to `version = "^2"` and no v2 tag contains it. So the
+      -- server is defined here in full. Once lspconfig v3 lands, drop everything below
+      -- except `settings` and let upstream provide cmd/filetypes/root_markers.
+      tsc = {
+        cmd = { "tsc", "--lsp", "--stdio" },
+        filetypes = {
+          "javascript",
+          "javascriptreact",
+          "javascript.jsx",
+          "typescript",
+          "typescriptreact",
+          "typescript.tsx",
+        },
+        root_markers = {
+          { "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb" },
+          { "tsconfig.json", "jsconfig.json", "package.json" },
+          { ".git" },
+        },
+        settings = {
+          ["js/ts"] = {
+            inlayHints = {
+              parameterNames = { enabled = "all", suppressWhenArgumentMatchesName = true },
+              parameterTypes = { enabled = true },
+              variableTypes = { enabled = true },
+              propertyDeclarationTypes = { enabled = true },
+              functionLikeReturnTypes = { enabled = true },
+              enumMemberValues = { enabled = true },
+            },
+          },
+        },
+      },
     },
     -- customize how language servers are attached
     handlers = {
@@ -55,34 +89,6 @@ return {
       -- the key is the server that is being setup with `lspconfig`
       -- rust_analyzer = false, -- setting a handler to false will disable the set up of that language server
       -- pyright = function(_, opts) require("lspconfig").pyright.setup(opts) end -- or a custom handler function can be passed
-
-      -- Register and setup tsgo LSP server
-      tsgo = function(server, opts)
-        vim.lsp.config(server, vim.tbl_deep_extend("force", {
-          cmd = { "tsgo", "--lsp", "--stdio" },
-          filetypes = {
-            "javascript",
-            "javascriptreact",
-            "javascript.jsx",
-            "typescript",
-            "typescriptreact",
-            "typescript.tsx",
-          },
-          root_markers = { "tsconfig.json", "jsconfig.json", "package.json", ".git" },
-          init_options = {
-            preferences = {
-              includeInlayParameterNameHints = "all",
-              includeInlayParameterNameHintsWhenArgumentMatchesName = true,
-              includeInlayFunctionParameterTypeHints = true,
-              includeInlayVariableTypeHints = true,
-              includeInlayPropertyDeclarationTypeHints = true,
-              includeInlayFunctionLikeReturnTypeHints = true,
-              includeInlayEnumMemberValueHints = true,
-            },
-          },
-        }, opts or {}))
-        vim.lsp.enable(server)
-      end,
 
       -- Disable TypeScript/JavaScript LSP servers
       vtsls = false,
@@ -104,9 +110,7 @@ return {
           -- the rest of the autocmd options (:h nvim_create_autocmd)
           desc = "Refresh codelens (buffer)",
           callback = function(args)
-            if require("astrolsp").config.features.codelens then
-              vim.lsp.codelens.enable(true, { bufnr = args.buf })
-            end
+            if require("astrolsp").config.features.codelens then vim.lsp.codelens.enable(true, { bufnr = args.buf }) end
           end,
         },
       },

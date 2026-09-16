@@ -13,7 +13,7 @@ return {
       ensure_installed = {
         -- install language servers
         "lua-language-server",
-        "tsgo", -- TypeScript/JavaScript LSP
+        "tsc", -- TypeScript/JavaScript LSP (TypeScript 7 native compiler)
 
         -- install formatters
         "stylua",
