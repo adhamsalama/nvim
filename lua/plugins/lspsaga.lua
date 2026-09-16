@@ -39,5 +39,46 @@ return {
       },
     },
   },
-  config = function(_, opts) require("lspsaga").setup(opts) end,
+  config = function(_, opts)
+    require("lspsaga").setup(opts)
+
+    -- Preview/jump to the actual call site, the way VS Code does.
+    --
+    -- For incoming calls the protocol provides `fromRanges` — where inside the caller the call
+    -- happens — but lspsaga only ever reads `from.selectionRange`, the caller's declaration
+    -- (callhierarchy.lua:248 for the jump, :294 for the preview); `fromRanges` appears nowhere
+    -- in the plugin. It does keep the whole result object as the node value, so the ranges are
+    -- already in memory, just unused.
+    --
+    -- So: swap in the call site for display, and restore the declaration on the way back out.
+    -- The restore matters — `toggle_or_request` sends the same item back to fetch the next
+    -- level, and a rewritten selectionRange would resolve to the wrong symbol and break
+    -- expansion. Outgoing calls are left alone: their `fromRanges` are in the *current* file,
+    -- not in `to`, so `to.selectionRange` is already correct there.
+    local util = require "lspsaga.util"
+    local orig_request = util.client_request
+    util.client_request = function(client, method, params, handler, ...)
+      if type(params) == "table" and type(params.item) == "table" and params.item.__decl_range then
+        local item = vim.deepcopy(params.item)
+        item.selectionRange, item.__decl_range = item.__decl_range, nil
+        params = vim.tbl_extend("force", params, { item = item })
+      end
+      if method == "callHierarchy/incomingCalls" and type(handler) == "function" then
+        local inner = handler
+        handler = function(err, res, ...)
+          if type(res) == "table" then
+            for _, call in ipairs(res) do
+              local site = type(call.fromRanges) == "table" and call.fromRanges[1]
+              if site and type(call.from) == "table" and not call.from.__decl_range then
+                call.from.__decl_range = call.from.selectionRange
+                call.from.selectionRange = site
+              end
+            end
+          end
+          return inner(err, res, ...)
+        end
+      end
+      return orig_request(client, method, params, handler, ...)
+    end
+  end,
 }
