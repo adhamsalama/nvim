@@ -35,7 +35,7 @@ return {
         quit = "q",
         close = "<C-c>k",
         shuttle = "[w",
-        toggle_or_req = "u", -- expand a node to request the next level
+        toggle_or_req = "<Tab>", -- expand a node to request the next level
       },
     },
   },
