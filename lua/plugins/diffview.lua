@@ -17,6 +17,19 @@ return {
       end,
       desc = "Diff branch",
     },
+    -- branch: feat/diffview-branch-commits
+    {
+      "<leader>gB",
+      function()
+        vim.ui.input({ prompt = "Enter branch to compare (leave empty for origin/HEAD): " }, function(branch)
+          if branch == nil then return end
+          local target = (branch ~= "") and ("origin/" .. branch) or "origin/HEAD"
+          -- Two dots: commits reachable from HEAD but not from the target branch
+          vim.cmd("DiffviewFileHistory --range=" .. target .. "..HEAD")
+        end)
+      end,
+      desc = "Diff branch commits",
+    },
     {
       "<leader>gc",
       function()
