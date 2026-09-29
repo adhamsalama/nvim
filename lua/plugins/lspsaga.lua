@@ -18,6 +18,11 @@ return {
   keys = {
     { "<Leader>lc", "<Cmd>Lspsaga incoming_calls<CR>", desc = "Incoming calls" },
     { "<Leader>lC", "<Cmd>Lspsaga outgoing_calls<CR>", desc = "Outgoing calls" },
+    {
+      "<Leader>lv",
+      function() require("lspsaga.callhierarchy"):restore_last() end,
+      desc = "Reopen last call hierarchy",
+    },
   },
   opts = {
     -- we have our own winbar (see `lua/plugins/astroui.lua`)
@@ -79,6 +84,81 @@ return {
         end
       end
       return orig_request(client, method, params, handler, ...)
+    end
+
+    -- Reopen the last call hierarchy tree, expansions included.
+    --
+    -- Every way out of the tree (quit, close, and the edit/split/tabe jumps) goes through
+    -- `ch:clean()`, which nils every field on the instance. The tree itself is the `self.list`
+    -- linked list: each node keeps its `inlevel`, `expand` state and `winline` (-1 when hidden
+    -- under a collapsed parent), so holding on to it is enough to redraw the same view. The
+    -- hook goes on the metatable because `clean()` would wipe anything set on the instance.
+    local ch = require "lspsaga.callhierarchy"
+    local mt = getmetatable(ch)
+    local saga_config = require("lspsaga").config
+    local last
+
+    local orig_clean = mt.clean
+    mt.clean = function(self)
+      if self.list and self.list.value then
+        last = { list = self.list, method = self.method, layout = self.layout, main_buf = self.main_buf }
+      end
+      return orig_clean(self)
+    end
+
+    mt.restore_last = function(self)
+      if self.left_winid and vim.api.nvim_win_is_valid(self.left_winid) then
+        return vim.api.nvim_set_current_win(self.left_winid)
+      end
+      if not last then return vim.notify("[lspsaga] no call hierarchy to reopen", vim.log.levels.WARN) end
+      if not vim.api.nvim_buf_is_valid(last.main_buf) then last.main_buf = vim.api.nvim_get_current_buf() end
+
+      self.list, self.method, self.layout, self.main_buf = last.list, last.method, last.layout, last.main_buf
+      local height = bit.rshift(vim.o.lines, 1) - 4
+      local width = math.floor(vim.api.nvim_win_get_width(0) * saga_config.callhierarchy.left_width)
+      self.left_bufnr, self.left_winid, self.right_bufnr, self.right_winid = require("lspsaga.layout")
+        :new(self.layout)
+        :left(height, width)
+        :bufopt({ filetype = "sagacallhierarchy", buftype = "nofile", bufhidden = "wipe" })
+        :right()
+        :bufopt({ buftype = "nofile", bufhidden = "wipe" })
+        :done()
+      self:peek_view()
+      self:keymap()
+
+      local incoming = self.method == "callHierarchy/incomingCalls"
+      local visible, lines = {}, {}
+      require("lspsaga.slist").list_map(self.list, function(node)
+        local v = node.value
+        -- preview buffers were wiped/cleared by clean(); let peek_view reload them
+        v.bufnr, v.wipe, v.rendered = nil, nil, nil
+        if v.winline and v.winline > 0 then
+          visible[#visible + 1] = v
+          lines[v.winline] = (" "):rep(v.inlevel) .. (incoming and v.from or v.to).name
+        end
+      end)
+
+      vim.bo[self.left_bufnr].modifiable = true
+      vim.api.nvim_buf_set_lines(self.left_bufnr, 0, -1, false, lines)
+      local kind = require("lspsaga.lspkind").kind
+      local ns = vim.api.nvim_create_namespace "SagaCallhierarchy"
+      for _, v in ipairs(visible) do
+        local row = v.winline - 1
+        self:set_toggle_icon(
+          v.expand and saga_config.ui.collapse or saga_config.ui.expand,
+          row,
+          v.inlevel - 4,
+          v.virtid
+        )
+        local k = kind[(incoming and v.from or v.to).kind]
+        vim.api.nvim_buf_set_extmark(self.left_bufnr, ns, row, v.inlevel - 2, {
+          virt_text = { { k[2], "Saga" .. k[3] } },
+          virt_text_pos = "overlay",
+        })
+        self:render_virtline(row, v.inlevel)
+      end
+      vim.bo[self.left_bufnr].modifiable = false
+      vim.api.nvim_win_set_cursor(self.left_winid, { 1, 4 })
     end
   end,
 }
