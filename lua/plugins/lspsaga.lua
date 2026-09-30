@@ -69,7 +69,9 @@ return {
     -- Such handlers are never called directly either, only passed around (`Router.put(path,
     -- Controller[KEY])`), so asking for their incoming calls finds nothing. Expanding one sends
     -- `textDocument/references` on its key instead, and lists the `X[KEY]` lookups as the next
-    -- level — "used by" rather than "called by". Those reference nodes are leaves.
+    -- level — "used by" rather than "called by". References that are calls (`obj.fn()`) become
+    -- expandable callers, so the same trick covers `{ name: async () => {} }` style code, where
+    -- tsserver has no call hierarchy at all (see `prepare_fallback`).
     local util = require "lspsaga.util"
     local orig_request = util.client_request
     local FILE_KINDS, FUNCTION_KIND = { [1] = true, [2] = true }, 12 -- File, Module
@@ -106,22 +108,50 @@ return {
       end
     end
 
-    -- a reference to KEY worth listing is a lookup (`Controller[KEY]`); label it by the outermost
-    -- call it sits in plus the object looked up, e.g. `Router.put('/:productId') · Controller`
-    local function reference_label(loc)
+    local function text(node, bufnr) return vim.treesitter.get_node_text(node, bufnr) end
+    local function lsp_range(node)
+      local sr, sc, er, ec = node:range()
+      return { start = { line = sr, character = sc }, ["end"] = { line = er, character = ec } }
+    end
+
+    -- Turn one reference to a function's name into a hierarchy entry, or nil to skip it:
+    --   * `obj.fn(...)` / `fn(...)` is a call: named after the enclosing function and expandable,
+    --     so the chain keeps going through functions tsserver can't do call hierarchy for
+    --   * `Controller[KEY]` / `middleware.fn` passed along is a use: a leaf labelled by the
+    --     outermost call it sits in, e.g. `Router.put('/:productId') · Controller`
+    --   * definitions (`fn: {...}` in another object), imports, strings: skipped
+    local function reference_entry(loc)
       local bufnr, node = ts_node_at(loc.uri, loc.range.start)
-      local sub = node and node:parent()
-      if not sub or sub:type() ~= "subscript_expression" then return end
-      local object = vim.treesitter.get_node_text(sub:field("object")[1], bufnr)
-      local call
-      for n in function(_, cur) return cur:parent() end, nil, sub do
-        if n:type() == "arguments" and n:parent() and n:parent():type() == "call_expression" then call = n end
+      local parent = node and node:parent()
+      if not parent then return end
+      local access = (parent:type() == "member_expression" and parent:field("property")[1] == node)
+        or (parent:type() == "subscript_expression" and parent:field("index")[1] == node)
+      local callee = access and parent or node
+      local call = callee:parent()
+      local entry = { kind = FUNCTION_KIND, uri = loc.uri, range = loc.range, selectionRange = loc.range }
+
+      if call and call:type() == "call_expression" and call:field("function")[1] == callee then
+        local name, ref_pos = enclosing_name(loc.uri, loc.range.start)
+        entry.name = name or ("%s:%d"):format(vim.fs.basename(vim.uri_to_fname(loc.uri)), loc.range.start.line + 1)
+        entry.__ref_pos, entry.__ref_leaf = ref_pos, not ref_pos or nil
+        return entry
       end
-      if not call then return ("%s[…]"):format(object) end
-      local callee = vim.treesitter.get_node_text(call:parent():field("function")[1], bufnr)
-      local first = call:named_child(0)
-      local arg = first and first:type() == "string" and vim.treesitter.get_node_text(first, bufnr) or ""
-      return ("%s(%s) · %s"):format(callee, arg, object)
+      if not access then return end
+
+      local object = text(parent:field("object")[1], bufnr)
+      local outer
+      for n in function(_, cur) return cur:parent() end, nil, parent do
+        if n:type() == "arguments" and n:parent() and n:parent():type() == "call_expression" then outer = n end
+      end
+      if outer then
+        local first = outer:named_child(0)
+        local arg = first and first:type() == "string" and text(first, bufnr) or ""
+        entry.name = ("%s(%s) · %s"):format(text(outer:parent():field("function")[1], bufnr), arg, object)
+      else
+        entry.name = parent:type() == "subscript_expression" and ("%s[…]"):format(object) or text(parent, bufnr)
+      end
+      entry.__ref_leaf = true
+      return entry
     end
 
     local function request_references(client, item, handler)
@@ -133,23 +163,38 @@ return {
       return orig_request(client, "textDocument/references", params, function(err, locs, ...)
         local calls = {}
         for _, loc in ipairs(locs or {}) do
-          local ok, label = pcall(reference_label, loc)
-          if ok and label then
-            calls[#calls + 1] = {
-              from = {
-                name = label,
-                kind = FUNCTION_KIND,
-                uri = loc.uri,
-                range = loc.range,
-                selectionRange = loc.range,
-                __ref_leaf = true,
-              },
-              fromRanges = { loc.range },
-            }
-          end
+          local ok, entry = pcall(reference_entry, loc)
+          if ok and entry then calls[#calls + 1] = { from = entry, fromRanges = { loc.range } } end
         end
         return handler(err, calls, ...)
       end)
+    end
+
+    -- tsserver has no call hierarchy item for a function stored in an object property
+    -- (`name: async () => {}` / `name: function () {}`), so prepare returns nothing. With the
+    -- cursor on such a name, build the root item here and let references drive the expansion.
+    local function prepare_fallback(params)
+      local uri = params.textDocument.uri
+      local bufnr, node = ts_node_at(uri, params.position)
+      for _ = 1, 3 do
+        if not node then return end
+        local parent = node:parent()
+        if parent and parent:type() == "pair" and parent:field("key")[1] == node then
+          local value = parent:field("value")[1]
+          if not (value and fn_types[value:type()]) then return end
+          local target = node:type() == "computed_property_name" and node:named_child(0) or node
+          local row, col = target:start()
+          return {
+            name = (text(node, bufnr):gsub("^%[(.*)%]$", "%1")),
+            kind = FUNCTION_KIND,
+            uri = uri,
+            range = lsp_range(parent),
+            selectionRange = lsp_range(node),
+            __ref_pos = { line = row, character = col },
+          }
+        end
+        node = parent
+      end
     end
 
     util.client_request = function(client, method, params, handler, ...)
@@ -159,6 +204,16 @@ return {
           return vim.schedule(function() handler(nil, {}) end)
         end
         if item.__ref_pos then return request_references(client, item, handler) end
+      end
+      if method == "textDocument/prepareCallHierarchy" and type(handler) == "function" then
+        local inner = handler
+        handler = function(err, res, ...)
+          if not err and (res == nil or vim.tbl_isempty(res)) then
+            local ok, fallback = pcall(prepare_fallback, params)
+            if ok and fallback then res = { fallback } end
+          end
+          return inner(err, res, ...)
+        end
       end
       if item and item.__decl_range then
         item = vim.deepcopy(item)
