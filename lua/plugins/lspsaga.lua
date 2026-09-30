@@ -78,9 +78,19 @@ return {
     local fn_types =
       { arrow_function = true, function_expression = true, ["function"] = true, generator_function = true }
 
-    local function ts_node_at(uri, pos)
+    -- `bufload()` throws E325 on a file with a swap file (e.g. open in another nvim); these
+    -- buffers are only read, so skip the swap check for ones not loaded yet
+    local function load_buf(uri)
       local bufnr = vim.uri_to_bufnr(uri)
-      vim.fn.bufload(bufnr)
+      if not vim.api.nvim_buf_is_loaded(bufnr) then
+        vim.bo[bufnr].swapfile = false
+        vim.fn.bufload(bufnr)
+      end
+      return bufnr
+    end
+
+    local function ts_node_at(uri, pos)
+      local bufnr = load_buf(uri)
       local ft = vim.bo[bufnr].filetype
       if ft == "" then ft = vim.filetype.match { buf = bufnr } or "" end
       local ok, parser = pcall(vim.treesitter.get_parser, bufnr, vim.treesitter.language.get_lang(ft) or ft)
@@ -139,22 +149,85 @@ return {
         entry.__ref_pos, entry.__ref_leaf = ref_pos, not ref_pos or nil
         return entry
       end
-      if not access then return end
+      -- a bare `fn` handed to a call, e.g. `Router.get(path, auth, fn)`
+      local passed = not access and parent:type() == "arguments"
+      if not (access or passed) then return end
 
-      local object = text(parent:field("object")[1], bufnr)
+      local object = passed and text(node, bufnr) or text(parent:field("object")[1], bufnr)
       local outer
-      for n in function(_, cur) return cur:parent() end, nil, parent do
+      for n in function(_, cur) return cur:parent() end, nil, node do
         if n:type() == "arguments" and n:parent() and n:parent():type() == "call_expression" then outer = n end
       end
+      if passed and not outer then return end -- `new X(fn)` and the like
       if outer then
         local first = outer:named_child(0)
         local arg = first and first:type() == "string" and text(first, bufnr) or ""
         entry.name = ("%s(%s) · %s"):format(text(outer:parent():field("function")[1], bufnr), arg, object)
-      else
+      elseif not passed then
         entry.name = parent:type() == "subscript_expression" and ("%s[…]"):format(object) or text(parent, bufnr)
       end
       entry.__ref_leaf = true
       return entry
+    end
+
+    local function ensure_attached(client, bufnr)
+      if vim.lsp.buf_is_attached(bufnr, client.id) then return end
+      if vim.bo[bufnr].filetype == "" then vim.bo[bufnr].filetype = vim.filetype.match { buf = bufnr } or "" end
+      vim.lsp.buf_attach_client(bufnr, client.id)
+    end
+
+    -- tsgo doesn't follow CommonJS exports across files: references to a function exported as
+    -- `module.exports = { fn }` stop at that shorthand. Find the files importing it by name
+    -- (`const { fn } = require(...)` / `import { fn }`), keep the imports that resolve to one of
+    -- `exports`, and return the references found from there.
+    local import_types = { shorthand_property_identifier_pattern = true, import_specifier = true }
+    local function importer_references(client, name, exports, cb)
+      local rg = vim
+        .system({ "rg", "--vimgrep", "-wF", "--glob", "!node_modules", "--type", "js", "--type", "ts", name, "." }, {
+          text = true,
+        })
+        :wait()
+      local cands = {}
+      for line in vim.gsplit(rg.stdout or "", "\n", { trimempty = true }) do
+        local file, lnum, col = line:match "^(.-):(%d+):(%d+):"
+        if file then
+          local uri = vim.uri_from_fname(vim.fn.fnamemodify(file, ":p"))
+          local pos = { line = tonumber(lnum) - 1, character = tonumber(col) - 1 }
+          local ok, bufnr, node = pcall(ts_node_at, uri, pos)
+          if
+            ok
+            and node
+            and (import_types[node:type()] or import_types[node:parent() and node:parent():type() or ""])
+          then
+            cands[#cands + 1] = { uri = uri, pos = pos, bufnr = bufnr }
+          end
+        end
+      end
+      local out, pending = {}, #cands
+      if pending == 0 then
+        return vim.schedule(function() cb(out) end)
+      end
+      local function done()
+        pending = pending - 1
+        if pending == 0 then cb(out) end
+      end
+      for _, cand in ipairs(cands) do
+        ensure_attached(client, cand.bufnr)
+        local params = { textDocument = { uri = cand.uri }, position = cand.pos }
+        orig_request(client, "textDocument/definition", params, function(_, res)
+          local hit = false
+          for _, d in ipairs(res and (res.uri or res.targetUri) and { res } or res or {}) do
+            local r = d.targetSelectionRange or d.range
+            hit = hit or exports[("%s:%d:%d"):format(d.targetUri or d.uri, r.start.line, r.start.character)]
+          end
+          if not hit then return done() end
+          params.context = { includeDeclaration = false }
+          orig_request(client, "textDocument/references", params, function(_, locs)
+            vim.list_extend(out, locs or {})
+            done()
+          end, cand.bufnr)
+        end, cand.bufnr)
+      end
     end
 
     local function request_references(client, item, handler)
@@ -164,12 +237,26 @@ return {
         context = { includeDeclaration = false },
       }
       return orig_request(client, "textDocument/references", params, function(err, locs, ...)
-        local calls = {}
-        for _, loc in ipairs(locs or {}) do
-          local ok, entry = pcall(reference_entry, loc)
-          if ok and entry then calls[#calls + 1] = { from = entry, fromRanges = { loc.range } } end
+        local calls, exports, name = {}, {}, nil
+        local function add(list, follow)
+          for _, loc in ipairs(list) do
+            local ok, bufnr, node = pcall(ts_node_at, loc.uri, loc.range.start)
+            if follow and ok and node and node:type() == "shorthand_property_identifier" then
+              exports[("%s:%d:%d"):format(loc.uri, loc.range.start.line, loc.range.start.character)] = true
+              name = text(node, bufnr)
+            else
+              local ok2, entry = pcall(reference_entry, loc)
+              if ok2 and entry then calls[#calls + 1] = { from = entry, fromRanges = { loc.range } } end
+            end
+          end
         end
-        return handler(err, calls, ...)
+        add(locs or {}, true)
+        if not name then return handler(err, calls, ...) end
+        local rest = { ... }
+        importer_references(client, name, exports, function(more)
+          add(more, false)
+          handler(err, calls, unpack(rest))
+        end)
       end)
     end
 
@@ -205,12 +292,6 @@ return {
         end
       end
       return acc
-    end
-
-    local function ensure_attached(client, bufnr)
-      if vim.lsp.buf_is_attached(bufnr, client.id) then return end
-      if vim.bo[bufnr].filetype == "" then vim.bo[bufnr].filetype = vim.filetype.match { buf = bufnr } or "" end
-      vim.lsp.buf_attach_client(bufnr, client.id)
     end
 
     local function request_outgoing(client, item, handler)
@@ -304,8 +385,7 @@ return {
     -- tsserver only prepares a call hierarchy with the cursor exactly on the function's name. With it
     -- elsewhere on the declaration line (`async`, the indent, the parameters), point at the name.
     local function declaration_name_pos(params)
-      local bufnr = vim.uri_to_bufnr(params.textDocument.uri)
-      vim.fn.bufload(bufnr)
+      local bufnr = load_buf(params.textDocument.uri)
       local pos = vim.deepcopy(params.position)
       local line = vim.api.nvim_buf_get_lines(bufnr, pos.line, pos.line + 1, false)[1] or ""
       pos.character = math.max(pos.character, #line:match "^%s*")
@@ -372,7 +452,14 @@ return {
       end
       if method == "callHierarchy/incomingCalls" and type(handler) == "function" then
         local inner = handler
+        -- no callers at all: the function is likely only passed around (`Router.get(path, fn)`),
+        -- so list where it's used instead
+        local ref_item = params.item
         handler = function(err, res, ...)
+          if not err and ref_item and (res == nil or vim.tbl_isempty(res)) and not ref_item.__ref_pos then
+            ref_item = vim.tbl_extend("force", ref_item, { __ref_pos = ref_item.selectionRange.start })
+            return request_references(client, ref_item, inner)
+          end
           if type(res) == "table" then
             local out = {}
             for _, call in ipairs(res) do
