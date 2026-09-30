@@ -60,25 +60,73 @@ return {
     -- level, and a rewritten selectionRange would resolve to the wrong symbol and break
     -- expansion. Outgoing calls are left alone: their `fromRanges` are in the *current* file,
     -- not in `to`, so `to.selectionRange` is already correct there.
+    --
+    -- Callers the server can't name come back as the whole module: a `File`/`Module` item named by its
+    -- path. tsserver does this for functions under computed keys, e.g.
+    -- `export default { [PRODUCTS__UPDATE_PRODUCT]: async (req, res) => { ... } }`. For those,
+    -- each call site gets its own entry, named from the enclosing key/variable via treesitter.
     local util = require "lspsaga.util"
+    local FILE_KINDS, FUNCTION_KIND = { [1] = true, [2] = true }, 12 -- File, Module
+    local fn_types =
+      { arrow_function = true, function_expression = true, ["function"] = true, generator_function = true }
+
+    local function enclosing_name(uri, pos)
+      local bufnr = vim.uri_to_bufnr(uri)
+      vim.fn.bufload(bufnr)
+      local ft = vim.bo[bufnr].filetype
+      if ft == "" then ft = vim.filetype.match { buf = bufnr } or "" end
+      local ok, parser = pcall(vim.treesitter.get_parser, bufnr, vim.treesitter.language.get_lang(ft) or ft)
+      if not ok or not parser then return end
+      parser:parse()
+      local node =
+        vim.treesitter.get_node { bufnr = bufnr, pos = { pos.line, pos.character }, ignore_injections = false }
+      while node do
+        local parent = node:parent()
+        if fn_types[node:type()] and parent then
+          local name = parent:field("key")[1] or parent:field("name")[1] or parent:field("left")[1]
+          if name then return (vim.treesitter.get_node_text(name, bufnr):gsub("^%[(.*)%]$", "%1")) end
+        end
+        node = parent
+      end
+    end
+
     local orig_request = util.client_request
     util.client_request = function(client, method, params, handler, ...)
       if type(params) == "table" and type(params.item) == "table" and params.item.__decl_range then
         local item = vim.deepcopy(params.item)
         item.selectionRange, item.__decl_range = item.__decl_range, nil
+        item.name, item.kind = item.__orig_name or item.name, item.__orig_kind or item.kind
+        item.__orig_name, item.__orig_kind = nil, nil
         params = vim.tbl_extend("force", params, { item = item })
       end
       if method == "callHierarchy/incomingCalls" and type(handler) == "function" then
         local inner = handler
         handler = function(err, res, ...)
           if type(res) == "table" then
+            local out = {}
             for _, call in ipairs(res) do
-              local site = type(call.fromRanges) == "table" and call.fromRanges[1]
-              if site and type(call.from) == "table" and not call.from.__decl_range then
-                call.from.__decl_range = call.from.selectionRange
-                call.from.selectionRange = site
+              local from = type(call.from) == "table" and call.from
+              local ranges = type(call.fromRanges) == "table" and call.fromRanges or {}
+              if from and FILE_KINDS[from.kind] and #ranges > 0 and not from.__decl_range then
+                for _, site in ipairs(ranges) do
+                  local ok, name = pcall(enclosing_name, from.uri, site.start)
+                  local item = vim.deepcopy(from)
+                  item.__decl_range, item.selectionRange = item.selectionRange, site
+                  if ok and name then
+                    item.__orig_name, item.__orig_kind = item.name, item.kind
+                    item.name, item.kind = name, FUNCTION_KIND
+                  end
+                  out[#out + 1] = vim.tbl_extend("force", call, { from = item, fromRanges = { site } })
+                end
+              else
+                if from and ranges[1] and not from.__decl_range then
+                  from.__decl_range = from.selectionRange
+                  from.selectionRange = ranges[1]
+                end
+                out[#out + 1] = call
               end
             end
+            res = out
           end
           return inner(err, res, ...)
         end
