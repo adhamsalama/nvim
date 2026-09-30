@@ -31,6 +31,16 @@ return {
       desc = "Diff branch commits",
     },
     {
+      "<leader>gH",
+      function()
+        vim.ui.input({ prompt = "Commit hash: " }, function(hash)
+          if hash == nil or hash == "" then return end
+          vim.cmd("DiffviewFileHistory --range=" .. hash .. "^!")
+        end)
+      end,
+      desc = "Diff commit hash",
+    },
+    {
       "<leader>gc",
       function()
         -- Run `git blame` on the current line and extract the commit hash
