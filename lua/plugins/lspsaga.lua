@@ -65,12 +65,18 @@ return {
     -- path. tsserver does this for functions under computed keys, e.g.
     -- `export default { [PRODUCTS__UPDATE_PRODUCT]: async (req, res) => { ... } }`. For those,
     -- each call site gets its own entry, named from the enclosing key/variable via treesitter.
+    --
+    -- Such handlers are never called directly either, only passed around (`Router.put(path,
+    -- Controller[KEY])`), so asking for their incoming calls finds nothing. Expanding one sends
+    -- `textDocument/references` on its key instead, and lists the `X[KEY]` lookups as the next
+    -- level — "used by" rather than "called by". Those reference nodes are leaves.
     local util = require "lspsaga.util"
+    local orig_request = util.client_request
     local FILE_KINDS, FUNCTION_KIND = { [1] = true, [2] = true }, 12 -- File, Module
     local fn_types =
       { arrow_function = true, function_expression = true, ["function"] = true, generator_function = true }
 
-    local function enclosing_name(uri, pos)
+    local function ts_node_at(uri, pos)
       local bufnr = vim.uri_to_bufnr(uri)
       vim.fn.bufload(bufnr)
       local ft = vim.bo[bufnr].filetype
@@ -78,22 +84,84 @@ return {
       local ok, parser = pcall(vim.treesitter.get_parser, bufnr, vim.treesitter.language.get_lang(ft) or ft)
       if not ok or not parser then return end
       parser:parse()
-      local node =
+      return bufnr,
         vim.treesitter.get_node { bufnr = bufnr, pos = { pos.line, pos.character }, ignore_injections = false }
+    end
+
+    -- name of the function enclosing `pos`, plus where to ask for references to it
+    local function enclosing_name(uri, pos)
+      local bufnr, node = ts_node_at(uri, pos)
       while node do
         local parent = node:parent()
         if fn_types[node:type()] and parent then
           local name = parent:field("key")[1] or parent:field("name")[1] or parent:field("left")[1]
-          if name then return (vim.treesitter.get_node_text(name, bufnr):gsub("^%[(.*)%]$", "%1")) end
+          if name then
+            -- for `[KEY]: ...` reference the constant, not the brackets
+            local target = name:type() == "computed_property_name" and name:named_child(0) or name
+            local row, col = target:start()
+            return (vim.treesitter.get_node_text(name, bufnr):gsub("^%[(.*)%]$", "%1")), { line = row, character = col }
+          end
         end
         node = parent
       end
     end
 
-    local orig_request = util.client_request
+    -- a reference to KEY worth listing is a lookup (`Controller[KEY]`); label it by the outermost
+    -- call it sits in plus the object looked up, e.g. `Router.put('/:productId') · Controller`
+    local function reference_label(loc)
+      local bufnr, node = ts_node_at(loc.uri, loc.range.start)
+      local sub = node and node:parent()
+      if not sub or sub:type() ~= "subscript_expression" then return end
+      local object = vim.treesitter.get_node_text(sub:field("object")[1], bufnr)
+      local call
+      for n in function(_, cur) return cur:parent() end, nil, sub do
+        if n:type() == "arguments" and n:parent() and n:parent():type() == "call_expression" then call = n end
+      end
+      if not call then return ("%s[…]"):format(object) end
+      local callee = vim.treesitter.get_node_text(call:parent():field("function")[1], bufnr)
+      local first = call:named_child(0)
+      local arg = first and first:type() == "string" and vim.treesitter.get_node_text(first, bufnr) or ""
+      return ("%s(%s) · %s"):format(callee, arg, object)
+    end
+
+    local function request_references(client, item, handler)
+      local params = {
+        textDocument = { uri = item.uri },
+        position = item.__ref_pos,
+        context = { includeDeclaration = false },
+      }
+      return orig_request(client, "textDocument/references", params, function(err, locs, ...)
+        local calls = {}
+        for _, loc in ipairs(locs or {}) do
+          local ok, label = pcall(reference_label, loc)
+          if ok and label then
+            calls[#calls + 1] = {
+              from = {
+                name = label,
+                kind = FUNCTION_KIND,
+                uri = loc.uri,
+                range = loc.range,
+                selectionRange = loc.range,
+                __ref_leaf = true,
+              },
+              fromRanges = { loc.range },
+            }
+          end
+        end
+        return handler(err, calls, ...)
+      end)
+    end
+
     util.client_request = function(client, method, params, handler, ...)
-      if type(params) == "table" and type(params.item) == "table" and params.item.__decl_range then
-        local item = vim.deepcopy(params.item)
+      local item = type(params) == "table" and type(params.item) == "table" and params.item
+      if method == "callHierarchy/incomingCalls" and item and type(handler) == "function" then
+        if item.__ref_leaf then
+          return vim.schedule(function() handler(nil, {}) end)
+        end
+        if item.__ref_pos then return request_references(client, item, handler) end
+      end
+      if item and item.__decl_range then
+        item = vim.deepcopy(item)
         item.selectionRange, item.__decl_range = item.__decl_range, nil
         item.name, item.kind = item.__orig_name or item.name, item.__orig_kind or item.kind
         item.__orig_name, item.__orig_kind = nil, nil
@@ -109,14 +177,14 @@ return {
               local ranges = type(call.fromRanges) == "table" and call.fromRanges or {}
               if from and FILE_KINDS[from.kind] and #ranges > 0 and not from.__decl_range then
                 for _, site in ipairs(ranges) do
-                  local ok, name = pcall(enclosing_name, from.uri, site.start)
-                  local item = vim.deepcopy(from)
-                  item.__decl_range, item.selectionRange = item.selectionRange, site
+                  local ok, name, ref_pos = pcall(enclosing_name, from.uri, site.start)
+                  local synth = vim.deepcopy(from)
+                  synth.__decl_range, synth.selectionRange = synth.selectionRange, site
                   if ok and name then
-                    item.__orig_name, item.__orig_kind = item.name, item.kind
-                    item.name, item.kind = name, FUNCTION_KIND
+                    synth.__orig_name, synth.__orig_kind = synth.name, synth.kind
+                    synth.name, synth.kind, synth.__ref_pos = name, FUNCTION_KIND, ref_pos
                   end
-                  out[#out + 1] = vim.tbl_extend("force", call, { from = item, fromRanges = { site } })
+                  out[#out + 1] = vim.tbl_extend("force", call, { from = synth, fromRanges = { site } })
                 end
               else
                 if from and ranges[1] and not from.__decl_range then
