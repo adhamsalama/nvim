@@ -108,6 +108,9 @@ return {
       end
     end
 
+    -- file-level entries show the path relative to cwd (absolute if outside it)
+    local function rel_path(uri) return vim.fn.fnamemodify(vim.uri_to_fname(uri), ":.") end
+
     local function text(node, bufnr) return vim.treesitter.get_node_text(node, bufnr) end
     local function lsp_range(node)
       local sr, sc, er, ec = node:range()
@@ -132,7 +135,7 @@ return {
 
       if call and call:type() == "call_expression" and call:field("function")[1] == callee then
         local name, ref_pos = enclosing_name(loc.uri, loc.range.start)
-        entry.name = name or ("%s:%d"):format(vim.fs.basename(vim.uri_to_fname(loc.uri)), loc.range.start.line + 1)
+        entry.name = name or ("%s:%d"):format(rel_path(loc.uri), loc.range.start.line + 1)
         entry.__ref_pos, entry.__ref_leaf = ref_pos, not ref_pos or nil
         return entry
       end
@@ -238,6 +241,8 @@ return {
                   if ok and name then
                     synth.__orig_name, synth.__orig_kind = synth.name, synth.kind
                     synth.name, synth.kind, synth.__ref_pos = name, FUNCTION_KIND, ref_pos
+                  else
+                    synth.__orig_name, synth.name = synth.name, rel_path(synth.uri)
                   end
                   out[#out + 1] = vim.tbl_extend("force", call, { from = synth, fromRanges = { site } })
                 end
