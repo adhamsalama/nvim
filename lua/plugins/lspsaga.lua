@@ -301,6 +301,37 @@ return {
       end
     end
 
+    -- tsserver only prepares a call hierarchy with the cursor exactly on the function's name. With it
+    -- elsewhere on the declaration line (`async`, the indent, the parameters), point at the name.
+    local function declaration_name_pos(params)
+      local bufnr = vim.uri_to_bufnr(params.textDocument.uri)
+      vim.fn.bufload(bufnr)
+      local pos = vim.deepcopy(params.position)
+      local line = vim.api.nvim_buf_get_lines(bufnr, pos.line, pos.line + 1, false)[1] or ""
+      pos.character = math.max(pos.character, #line:match "^%s*")
+      local _, node = ts_node_at(params.textDocument.uri, pos)
+      while node do
+        local t, name, fn = node:type()
+        if t == "method_definition" or t == "function_declaration" then
+          name, fn = node:field("name")[1], node
+        elseif t == "pair" or t == "variable_declarator" then
+          local value = node:field("value")[1]
+          if value and fn_types[value:type()] then
+            name, fn = node:field("key")[1] or node:field("name")[1], value
+          end
+        end
+        if name then
+          local body = fn:field("body")[1]
+          local br, bc = (body or fn):start()
+          if pos.line > br or (pos.line == br and pos.character >= bc) then return end
+          local target = name:type() == "computed_property_name" and name:named_child(0) or name
+          local row, col = target:start()
+          return { line = row, character = col }
+        end
+        node = node:parent()
+      end
+    end
+
     util.client_request = function(client, method, params, handler, ...)
       local item = type(params) == "table" and type(params.item) == "table" and params.item
       if method == "callHierarchy/incomingCalls" and item and type(handler) == "function" then
@@ -314,13 +345,23 @@ return {
       end
       if method == "textDocument/prepareCallHierarchy" and type(handler) == "function" then
         local inner = handler
-        handler = function(err, res, ...)
+        local retried, req_args = false, { ... }
+        local function on_result(err, res, ...)
           if not err and (res == nil or vim.tbl_isempty(res)) then
+            if not retried then
+              retried = true
+              local ok, pos = pcall(declaration_name_pos, params)
+              if ok and pos and (pos.line ~= params.position.line or pos.character ~= params.position.character) then
+                params = vim.tbl_extend("force", params, { position = pos })
+                return orig_request(client, method, params, on_result, unpack(req_args))
+              end
+            end
             local ok, fallback = pcall(prepare_fallback, params)
             if ok and fallback then res = { fallback } end
           end
           return inner(err, res, ...)
         end
+        handler = on_result
       end
       if item and item.__decl_range then
         item = vim.deepcopy(item)
