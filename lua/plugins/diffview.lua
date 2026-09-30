@@ -35,7 +35,13 @@ return {
       function()
         vim.ui.input({ prompt = "Commit hash: " }, function(hash)
           if hash == nil or hash == "" then return end
-          vim.cmd("DiffviewFileHistory --range=" .. hash .. "^!")
+          vim.fn.system { "git", "rev-parse", "--verify", "--quiet", hash .. "^2" }
+          if vim.v.shell_error == 0 then
+            -- Merge commit: show the commits it brought in, excluding the merge commit itself
+            vim.cmd("DiffviewFileHistory --range=" .. hash .. "^1.." .. hash .. "^2")
+          else
+            vim.cmd("DiffviewFileHistory --range=" .. hash .. "^!")
+          end
         end)
       end,
       desc = "Diff commit hash",
@@ -143,6 +149,26 @@ return {
             end
           end,
           { desc = "Open commit in diffview" },
+        },
+        {
+          "n",
+          "gH",
+          function()
+            local line = vim.fn.getline "."
+            local commit_hash = line:match "|[^|]*|%s*(%x+)"
+            if not (commit_hash and #commit_hash >= 7) then
+              vim.notify("Could not find commit hash on this line", vim.log.levels.WARN)
+              return
+            end
+            vim.fn.system { "git", "rev-parse", "--verify", "--quiet", commit_hash .. "^2" }
+            if vim.v.shell_error ~= 0 then
+              vim.notify(commit_hash .. " is not a merge commit", vim.log.levels.WARN)
+              return
+            end
+            -- Commits brought in by the merge, excluding the merge commit itself
+            vim.cmd("DiffviewFileHistory --range=" .. commit_hash .. "^1.." .. commit_hash .. "^2")
+          end,
+          { desc = "Show commits of merge commit" },
         },
       },
       diff1 = {
