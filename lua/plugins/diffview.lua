@@ -118,6 +118,79 @@ return {
     vim.api.nvim_create_autocmd("ColorScheme", { pattern = "*", callback = set_diff_colors })
     set_diff_colors()
 
+    -- Diffview re-opens the current file on tab re-enter, which resets folds and window sizes.
+    -- Snapshot them when leaving the view and restore once the view has been re-rendered.
+    local saved = {}
+    local restore_timer = vim.uv.new_timer()
+
+    local function snapshot()
+      local tab = vim.api.nvim_get_current_tabpage()
+      local wins = {}
+      for i, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        wins[i] = vim.api.nvim_win_call(win, function()
+          local closed = {}
+          if vim.wo.foldenable then
+            local lnum, last = 1, vim.api.nvim_buf_line_count(buf)
+            while lnum <= last do
+              if vim.fn.foldclosed(lnum) == lnum then
+                table.insert(closed, lnum)
+                lnum = vim.fn.foldclosedend(lnum) + 1
+              else
+                lnum = lnum + 1
+              end
+            end
+          end
+          return { name = vim.api.nvim_buf_get_name(buf), closed = closed, view = vim.fn.winsaveview() }
+        end)
+      end
+      saved[tab] = { layout = vim.fn.winrestcmd(), wins = wins }
+    end
+
+    local function restore()
+      local tab = vim.api.nvim_get_current_tabpage()
+      local state = saved[tab]
+      if not state then return end
+      saved[tab] = nil
+      local wins = vim.api.nvim_tabpage_list_wins(tab)
+      if #wins ~= #state.wins then return end
+      vim.cmd(state.layout)
+      for i, win in ipairs(wins) do
+        local s = state.wins[i]
+        local buf = vim.api.nvim_win_get_buf(win)
+        if vim.api.nvim_buf_get_name(buf) == s.name then
+          vim.api.nvim_win_call(win, function()
+            if vim.wo.foldenable then
+              vim.cmd "normal! zR"
+              local last = vim.api.nvim_buf_line_count(buf)
+              for _, lnum in ipairs(s.closed) do
+                if lnum <= last then
+                  vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+                  pcall(vim.cmd, "normal! zc")
+                end
+              end
+            end
+            vim.fn.winrestview(s.view)
+          end)
+        end
+      end
+    end
+
+    -- Debounced: diffview opens the files asynchronously, so wait until it settles
+    local function schedule_restore(delay)
+      restore_timer:stop()
+      restore_timer:start(delay, 0, vim.schedule_wrap(restore))
+    end
+
+    opts.hooks = {
+      view_leave = snapshot,
+      view_enter = function() schedule_restore(150) end,
+      diff_buf_win_enter = function()
+        if saved[vim.api.nvim_get_current_tabpage()] then schedule_restore(50) end
+      end,
+      view_closed = function() saved[vim.api.nvim_get_current_tabpage()] = nil end,
+    }
+
     opts.keymaps = {
       view = {
         ["<leader>b"] = false, -- Focus files panel in Diffview
