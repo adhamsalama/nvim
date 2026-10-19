@@ -514,6 +514,29 @@ return {
       return orig_clean(self)
     end
 
+    -- Show our heirline winbar (path + file + symbol breadcrumbs) on the preview window.
+    -- Heirline skips it on its own: preview buffers come from `bufload()`, so they're unlisted and
+    -- AstroNvim's `disable_winbar_cb` rejects them, clearing the winbar on every `BufWinEnter`.
+    -- peek_view swaps the previewed buffer on CursorMoved in the tree, so set it again after each swap;
+    -- this autocmd is created after lspsaga's, so it runs after the swap.
+    local heirline_winbar = "%{%v:lua.require'heirline'.eval_winbar()%}"
+    local orig_peek_view = mt.peek_view
+    mt.peek_view = function(self)
+      orig_peek_view(self)
+      vim.api.nvim_create_autocmd("CursorMoved", {
+        group = vim.api.nvim_create_augroup("SagaCallhierarchyWinbar", { clear = true }),
+        buffer = self.left_bufnr,
+        callback = function()
+          if self.right_winid and vim.api.nvim_win_is_valid(self.right_winid) then
+            vim.api.nvim_set_option_value("winbar", heirline_winbar, { scope = "local", win = self.right_winid })
+            -- the file_info component is cached until `BufEnter`, which swapping the preview buffer
+            -- doesn't fire; run heirline's own invalidation handlers so it shows the new file
+            vim.api.nvim_exec_autocmds("BufEnter", { group = "Heirline_update_autocmds" })
+          end
+        end,
+      })
+    end
+
     mt.restore_last = function(self)
       if self.left_winid and vim.api.nvim_win_is_valid(self.left_winid) then
         return vim.api.nvim_set_current_win(self.left_winid)
