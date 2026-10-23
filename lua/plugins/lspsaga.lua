@@ -633,56 +633,70 @@ return {
       vim.bo[self.left_bufnr].modifiable = false
     end
 
-    -- `dd`: drop the node under the cursor and its whole subtree from the tree. The slist is a
-    -- pre-order list, so a node's descendants are the following entries with a deeper `inlevel`;
-    -- unlink that span, renumber the remaining visible lines, and repaint. The root (the symbol the
-    -- hierarchy was opened on) has no predecessor to splice onto, so it is kept.
-    mt.delete_node = function(self)
+    -- Drop every node whose line falls in `[lstart, lend]`, each together with its whole subtree.
+    -- The slist is pre-order, so a node's descendants are the following entries with a deeper
+    -- `inlevel`: walk once, keeping survivors and skipping any node selected in the range plus
+    -- everything under it (`level` holds the inlevel we're pruning beneath). Renumber the remaining
+    -- visible lines to a contiguous 1..N and repaint. The root (the symbol the hierarchy was opened
+    -- on) is never removed — it anchors the list.
+    mt.delete_range = function(self, lstart, lend)
       if not (self.left_winid and vim.api.nvim_win_is_valid(self.left_winid)) then return end
       local slist = require "lspsaga.slist"
-      local curlnum = vim.api.nvim_win_get_cursor(self.left_winid)[1]
-      local curnode = slist.find_node(self.list, curlnum)
-      if not curnode then return end
-      if curnode == self.list then
-        return vim.notify("[lspsaga] can't delete the root of the call hierarchy", vim.log.levels.WARN)
-      end
-      -- the slist is singly linked (no reliable `prev`), so walk to the predecessor
-      local prev = self.list
-      while prev and prev.next ~= curnode do
-        prev = prev.next
-      end
-      if not prev then return end
-      -- extend past every descendant (deeper inlevel) to the next sibling/ancestor, then splice it out
-      local tail = curnode.next
-      while tail and tail.value.inlevel > curnode.value.inlevel do
-        tail = tail.next
-      end
-      prev.next = tail
-      -- the remaining visible nodes must stay a contiguous 1..N for redraw_tree
-      local count = 0
+      local survivors, removed, level = {}, 0, nil
       slist.list_map(self.list, function(node)
         local v = node.value
-        if v and v.winline and v.winline > 0 then
-          count = count + 1
-          v.winline = count
+        if level and v.inlevel > level then
+          removed = removed + 1 -- a descendant of a node already removed
+          return
         end
+        level = nil
+        if node ~= self.list and v.winline and v.winline > 0 and v.winline >= lstart and v.winline <= lend then
+          level = v.inlevel -- remove this node and, below, its subtree
+          removed = removed + 1
+          return
+        end
+        survivors[#survivors + 1] = node
       end)
+      if removed == 0 then
+        if lstart <= 1 and lend >= 1 then
+          vim.notify("[lspsaga] can't delete the root of the call hierarchy", vim.log.levels.WARN)
+        end
+        return
+      end
+      local count = 0
+      for i, node in ipairs(survivors) do
+        node.next = survivors[i + 1]
+        if node.value.winline and node.value.winline > 0 then
+          count = count + 1
+          node.value.winline = count
+        end
+      end
       self:redraw_tree()
-      local row = math.max(1, math.min(curlnum, vim.api.nvim_buf_line_count(self.left_bufnr)))
+      local row = math.max(1, math.min(lstart, vim.api.nvim_buf_line_count(self.left_bufnr)))
       vim.api.nvim_win_set_cursor(self.left_winid, { row, 4 })
     end
 
-    -- lspsaga's keymap() only binds the configured keys; add `dd` on top for every tree it opens
-    -- (initial render and restore_last both call keymap()).
+    -- lspsaga's keymap() only binds the configured keys; add deletion on top for every tree it opens
+    -- (initial render and restore_last both call keymap()): `dd` drops the entry under the cursor,
+    -- and `d` over a visual selection drops every selected entry.
     local orig_keymap = mt.keymap
     mt.keymap = function(self)
       orig_keymap(self)
-      vim.keymap.set("n", "dd", function() self:delete_node() end, {
-        buffer = self.left_bufnr,
-        nowait = true,
-        silent = true,
-        desc = "Delete entry from call hierarchy",
-      })
+      vim.keymap.set("n", "dd", function()
+        local l = vim.api.nvim_win_get_cursor(self.left_winid)[1]
+        self:delete_range(l, l)
+      end, { buffer = self.left_bufnr, nowait = true, silent = true, desc = "Delete entry from call hierarchy" })
+      vim.keymap.set(
+        "x",
+        "d",
+        function()
+          local a, b = vim.fn.line "v", vim.fn.line "."
+          -- leave visual mode before mutating the buffer, then prune the selected span
+          vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+          self:delete_range(math.min(a, b), math.max(a, b))
+        end,
+        { buffer = self.left_bufnr, nowait = true, silent = true, desc = "Delete selected entries from call hierarchy" }
+      )
     end
 
     mt.restore_last = function(self)
