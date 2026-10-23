@@ -78,27 +78,9 @@ return {
     local fn_types =
       { arrow_function = true, function_expression = true, ["function"] = true, generator_function = true }
 
-    -- `bufload()` throws E325 on a file with a swap file (e.g. open in another nvim); these
-    -- buffers are only read, so skip the swap check for ones not loaded yet
-    local function load_buf(uri)
-      local bufnr = vim.uri_to_bufnr(uri)
-      if not vim.api.nvim_buf_is_loaded(bufnr) then
-        vim.bo[bufnr].swapfile = false
-        vim.fn.bufload(bufnr)
-      end
-      return bufnr
-    end
-
-    local function ts_node_at(uri, pos)
-      local bufnr = load_buf(uri)
-      local ft = vim.bo[bufnr].filetype
-      if ft == "" then ft = vim.filetype.match { buf = bufnr } or "" end
-      local ok, parser = pcall(vim.treesitter.get_parser, bufnr, vim.treesitter.language.get_lang(ft) or ft)
-      if not ok or not parser then return end
-      parser:parse()
-      return bufnr,
-        vim.treesitter.get_node { bufnr = bufnr, pos = { pos.line, pos.character }, ignore_injections = false }
-    end
+    -- shared with the `grr` override (lua/plugins/tsgo-references.lua) via lua/utils/tsgo.lua
+    local tsgo = require "utils.tsgo"
+    local load_buf, ts_node_at, ensure_attached = tsgo.load_buf, tsgo.ts_node_at, tsgo.ensure_attached
 
     -- name of the function enclosing `pos`, plus where to ask for references to it.
     -- `method_definition` / `function_declaration` carry their own `name`; arrow and function
@@ -174,12 +156,6 @@ return {
       end
       entry.__ref_leaf = true
       return entry
-    end
-
-    local function ensure_attached(client, bufnr)
-      if vim.lsp.buf_is_attached(bufnr, client.id) then return end
-      if vim.bo[bufnr].filetype == "" then vim.bo[bufnr].filetype = vim.filetype.match { buf = bufnr } or "" end
-      vim.lsp.buf_attach_client(bufnr, client.id)
     end
 
     -- tsgo doesn't follow CommonJS exports across files: references to a function exported as
