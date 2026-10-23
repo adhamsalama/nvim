@@ -100,21 +100,27 @@ return {
         vim.treesitter.get_node { bufnr = bufnr, pos = { pos.line, pos.character }, ignore_injections = false }
     end
 
-    -- name of the function enclosing `pos`, plus where to ask for references to it
+    -- name of the function enclosing `pos`, plus where to ask for references to it.
+    -- `method_definition` / `function_declaration` carry their own `name`; arrow and function
+    -- expressions are anonymous, so take the key/name/left of whatever binds them.
     local function enclosing_name(uri, pos)
       local bufnr, node = ts_node_at(uri, pos)
       while node do
-        local parent = node:parent()
-        if fn_types[node:type()] and parent then
-          local name = parent:field("key")[1] or parent:field("name")[1] or parent:field("left")[1]
-          if name then
-            -- for `[KEY]: ...` reference the constant, not the brackets
-            local target = name:type() == "computed_property_name" and name:named_child(0) or name
-            local row, col = target:start()
-            return (vim.treesitter.get_node_text(name, bufnr):gsub("^%[(.*)%]$", "%1")), { line = row, character = col }
-          end
+        local t = node:type()
+        local name
+        if t == "method_definition" or t == "function_declaration" then
+          name = node:field("name")[1]
+        elseif fn_types[t] then
+          local parent = node:parent()
+          name = parent and (parent:field("key")[1] or parent:field("name")[1] or parent:field("left")[1])
         end
-        node = parent
+        if name then
+          -- for `[KEY]: ...` reference the constant, not the brackets
+          local target = name:type() == "computed_property_name" and name:named_child(0) or name
+          local row, col = target:start()
+          return (vim.treesitter.get_node_text(name, bufnr):gsub("^%[(.*)%]$", "%1")), { line = row, character = col }
+        end
+        node = node:parent()
       end
     end
 
@@ -237,25 +243,58 @@ return {
         context = { includeDeclaration = false },
       }
       return orig_request(client, "textDocument/references", params, function(err, locs, ...)
-        local calls, exports, name = {}, {}, nil
+        local calls, exports, name, seen = {}, {}, nil, {}
+        local function key(loc) return ("%s:%d:%d"):format(loc.uri, loc.range.start.line, loc.range.start.character) end
+        -- `follow` is set only on the server's own results: a shorthand there (`export default { fn }`
+        -- / `module.exports = { fn }`) is the barrier tsgo stops references at, not a call, so record
+        -- it and chase through it rather than listing it. `seen` keeps the re-requests below from
+        -- re-adding the shorthand or double-counting a site two of them both return.
         local function add(list, follow)
           for _, loc in ipairs(list) do
-            local ok, bufnr, node = pcall(ts_node_at, loc.uri, loc.range.start)
-            if follow and ok and node and node:type() == "shorthand_property_identifier" then
-              exports[("%s:%d:%d"):format(loc.uri, loc.range.start.line, loc.range.start.character)] = true
-              name = text(node, bufnr)
-            else
-              local ok2, entry = pcall(reference_entry, loc)
-              if ok2 and entry then calls[#calls + 1] = { from = entry, fromRanges = { loc.range } } end
+            if not seen[key(loc)] then
+              seen[key(loc)] = true
+              local ok, bufnr, node = pcall(ts_node_at, loc.uri, loc.range.start)
+              if follow and ok and node and node:type() == "shorthand_property_identifier" then
+                exports[key(loc)] = loc
+                name = text(node, bufnr)
+              else
+                local ok2, entry = pcall(reference_entry, loc)
+                if ok2 and entry then calls[#calls + 1] = { from = entry, fromRanges = { loc.range } } end
+              end
             end
           end
         end
         add(locs or {}, true)
         if not name then return handler(err, calls, ...) end
         local rest = { ... }
+
+        -- Callers reach a function parked in an export object two ways, and the query on its
+        -- declaration follows neither:
+        --   * `import Obj from '...'; Obj.fn()` — tsgo *does* resolve these, but only when references
+        --     are requested at the property inside the export object, so ask there.
+        --   * `const { fn } = require('...')` / `import { fn }` — named, so `importer_references`
+        --     finds the importing files and asks from each.
+        local pending = 1
+        local function finish()
+          pending = pending - 1
+          if pending == 0 then handler(err, calls, unpack(rest)) end
+        end
+        for _, loc in pairs(exports) do
+          pending = pending + 1
+          local bufnr = load_buf(loc.uri)
+          ensure_attached(client, bufnr)
+          orig_request(client, "textDocument/references", {
+            textDocument = { uri = loc.uri },
+            position = loc.range.start,
+            context = { includeDeclaration = false },
+          }, function(_, more)
+            add(more or {}, false)
+            finish()
+          end, bufnr)
+        end
         importer_references(client, name, exports, function(more)
           add(more, false)
-          handler(err, calls, unpack(rest))
+          finish()
         end)
       end)
     end
