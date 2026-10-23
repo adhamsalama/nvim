@@ -596,6 +596,95 @@ return {
       })
     end
 
+    -- Repaint the whole left buffer from the (possibly mutated) slist: one line per visible node
+    -- (`winline > 0`), with its toggle icon, kind icon and tree connectors. Clearing the namespace
+    -- first drops stale extmarks, so this is safe to call on an existing buffer after an edit.
+    -- Assumes visible winlines are a contiguous 1..N (see `renumber` in `delete_node`).
+    mt.redraw_tree = function(self)
+      local incoming = self.method == "callHierarchy/incomingCalls"
+      local visible, lines = {}, {}
+      require("lspsaga.slist").list_map(self.list, function(node)
+        local v = node.value
+        if v and v.winline and v.winline > 0 then
+          visible[#visible + 1] = v
+          lines[v.winline] = (" "):rep(v.inlevel) .. (incoming and v.from or v.to).name
+        end
+      end)
+      local ns = vim.api.nvim_create_namespace "SagaCallhierarchy"
+      vim.bo[self.left_bufnr].modifiable = true
+      vim.api.nvim_buf_clear_namespace(self.left_bufnr, ns, 0, -1)
+      vim.api.nvim_buf_set_lines(self.left_bufnr, 0, -1, false, lines)
+      local kind = require("lspsaga.lspkind").kind
+      for _, v in ipairs(visible) do
+        local row = v.winline - 1
+        self:set_toggle_icon(
+          v.expand and saga_config.ui.collapse or saga_config.ui.expand,
+          row,
+          v.inlevel - 4,
+          v.virtid
+        )
+        local k = kind[(incoming and v.from or v.to).kind]
+        vim.api.nvim_buf_set_extmark(self.left_bufnr, ns, row, v.inlevel - 2, {
+          virt_text = { { k[2], "Saga" .. k[3] } },
+          virt_text_pos = "overlay",
+        })
+        self:render_virtline(row, v.inlevel)
+      end
+      vim.bo[self.left_bufnr].modifiable = false
+    end
+
+    -- `dd`: drop the node under the cursor and its whole subtree from the tree. The slist is a
+    -- pre-order list, so a node's descendants are the following entries with a deeper `inlevel`;
+    -- unlink that span, renumber the remaining visible lines, and repaint. The root (the symbol the
+    -- hierarchy was opened on) has no predecessor to splice onto, so it is kept.
+    mt.delete_node = function(self)
+      if not (self.left_winid and vim.api.nvim_win_is_valid(self.left_winid)) then return end
+      local slist = require "lspsaga.slist"
+      local curlnum = vim.api.nvim_win_get_cursor(self.left_winid)[1]
+      local curnode = slist.find_node(self.list, curlnum)
+      if not curnode then return end
+      if curnode == self.list then
+        return vim.notify("[lspsaga] can't delete the root of the call hierarchy", vim.log.levels.WARN)
+      end
+      -- the slist is singly linked (no reliable `prev`), so walk to the predecessor
+      local prev = self.list
+      while prev and prev.next ~= curnode do
+        prev = prev.next
+      end
+      if not prev then return end
+      -- extend past every descendant (deeper inlevel) to the next sibling/ancestor, then splice it out
+      local tail = curnode.next
+      while tail and tail.value.inlevel > curnode.value.inlevel do
+        tail = tail.next
+      end
+      prev.next = tail
+      -- the remaining visible nodes must stay a contiguous 1..N for redraw_tree
+      local count = 0
+      slist.list_map(self.list, function(node)
+        local v = node.value
+        if v and v.winline and v.winline > 0 then
+          count = count + 1
+          v.winline = count
+        end
+      end)
+      self:redraw_tree()
+      local row = math.max(1, math.min(curlnum, vim.api.nvim_buf_line_count(self.left_bufnr)))
+      vim.api.nvim_win_set_cursor(self.left_winid, { row, 4 })
+    end
+
+    -- lspsaga's keymap() only binds the configured keys; add `dd` on top for every tree it opens
+    -- (initial render and restore_last both call keymap()).
+    local orig_keymap = mt.keymap
+    mt.keymap = function(self)
+      orig_keymap(self)
+      vim.keymap.set("n", "dd", function() self:delete_node() end, {
+        buffer = self.left_bufnr,
+        nowait = true,
+        silent = true,
+        desc = "Delete entry from call hierarchy",
+      })
+    end
+
     mt.restore_last = function(self)
       if self.left_winid and vim.api.nvim_win_is_valid(self.left_winid) then
         return vim.api.nvim_set_current_win(self.left_winid)
@@ -616,38 +705,11 @@ return {
       self:peek_view()
       self:keymap()
 
-      local incoming = self.method == "callHierarchy/incomingCalls"
-      local visible, lines = {}, {}
+      -- preview buffers were wiped/cleared by clean(); let peek_view reload them
       require("lspsaga.slist").list_map(self.list, function(node)
-        local v = node.value
-        -- preview buffers were wiped/cleared by clean(); let peek_view reload them
-        v.bufnr, v.wipe, v.rendered = nil, nil, nil
-        if v.winline and v.winline > 0 then
-          visible[#visible + 1] = v
-          lines[v.winline] = (" "):rep(v.inlevel) .. (incoming and v.from or v.to).name
-        end
+        node.value.bufnr, node.value.wipe, node.value.rendered = nil, nil, nil
       end)
-
-      vim.bo[self.left_bufnr].modifiable = true
-      vim.api.nvim_buf_set_lines(self.left_bufnr, 0, -1, false, lines)
-      local kind = require("lspsaga.lspkind").kind
-      local ns = vim.api.nvim_create_namespace "SagaCallhierarchy"
-      for _, v in ipairs(visible) do
-        local row = v.winline - 1
-        self:set_toggle_icon(
-          v.expand and saga_config.ui.collapse or saga_config.ui.expand,
-          row,
-          v.inlevel - 4,
-          v.virtid
-        )
-        local k = kind[(incoming and v.from or v.to).kind]
-        vim.api.nvim_buf_set_extmark(self.left_bufnr, ns, row, v.inlevel - 2, {
-          virt_text = { { k[2], "Saga" .. k[3] } },
-          virt_text_pos = "overlay",
-        })
-        self:render_virtline(row, v.inlevel)
-      end
-      vim.bo[self.left_bufnr].modifiable = false
+      self:redraw_tree()
       vim.api.nvim_win_set_cursor(self.left_winid, { 1, 4 })
     end
   end,
