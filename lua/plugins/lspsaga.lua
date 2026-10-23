@@ -32,6 +32,7 @@ return {
     beacon = { enable = false },
     callhierarchy = {
       layout = "float",
+      left_width = 0.35, -- wider tree pane (default 0.2) so deeply nested names aren't truncated
       keys = {
         edit = "<CR>",
         vsplit = "s",
@@ -46,6 +47,15 @@ return {
   },
   config = function(_, opts)
     require("lspsaga").setup(opts)
+
+    -- lspsaga hardcodes the call-hierarchy float at half the screen height (callhierarchy.lua:380),
+    -- which is cramped for deep trees. `layout:left` is the single chokepoint for both the initial
+    -- render and `restore_last`, so raise the height there (width stays config-driven via left_width).
+    local layout = require "lspsaga.layout"
+    local orig_layout_left = layout.left
+    layout.left = function(self, height, width, ...)
+      return orig_layout_left(self, math.max(height, math.floor(vim.o.lines * 0.85) - 4), width, ...)
+    end
 
     -- Preview/jump to the actual call site, the way VS Code does.
     --
