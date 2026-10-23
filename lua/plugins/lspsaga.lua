@@ -440,21 +440,55 @@ return {
       end
       if method == "textDocument/prepareCallHierarchy" and type(handler) == "function" then
         local inner = handler
-        local retried, req_args = false, { ... }
+        local tried_decl, tried_def, req_args = false, false, { ... }
         local function on_result(err, res, ...)
-          if not err and (res == nil or vim.tbl_isempty(res)) then
-            if not retried then
-              retried = true
-              local ok, pos = pcall(declaration_name_pos, params)
-              if ok and pos and (pos.line ~= params.position.line or pos.character ~= params.position.character) then
-                params = vim.tbl_extend("force", params, { position = pos })
+          local rest = { ... }
+          -- last resort: a function parked in an object property, which tsgo can't prepare
+          local function finish()
+            if not err and (res == nil or vim.tbl_isempty(res)) then
+              local ok, fallback = pcall(prepare_fallback, params)
+              if ok and fallback then res = { fallback } end
+            end
+            return inner(err, res, unpack(rest))
+          end
+          if err or not (res == nil or vim.tbl_isempty(res)) then return finish() end
+          -- cursor on the declaration line but off the name (indent, `async`, params): aim at the name
+          if not tried_decl then
+            tried_decl = true
+            local ok, pos = pcall(declaration_name_pos, params)
+            if ok and pos and (pos.line ~= params.position.line or pos.character ~= params.position.character) then
+              params = vim.tbl_extend("force", params, { position = pos })
+              return orig_request(client, method, params, on_result, unpack(req_args))
+            end
+          end
+          -- cursor on a re-export shorthand / alias (`export default { fn }`): tsgo won't prepare
+          -- there, but resolves its definition to the real declaration, where prepare works
+          if not tried_def then
+            tried_def = true
+            return orig_request(client, "textDocument/definition", {
+              textDocument = params.textDocument,
+              position = params.position,
+            }, function(_, dres)
+              local d = type(dres) == "table" and ((dres.uri or dres.targetUri) and dres or dres[1])
+              local uri = d and (d.targetUri or d.uri)
+              local r = d and (d.targetSelectionRange or d.range)
+              if
+                uri
+                and r
+                and (
+                  uri ~= params.textDocument.uri
+                  or r.start.line ~= params.position.line
+                  or r.start.character ~= params.position.character
+                )
+              then
+                ensure_attached(client, load_buf(uri))
+                params = vim.tbl_extend("force", params, { textDocument = { uri = uri }, position = r.start })
                 return orig_request(client, method, params, on_result, unpack(req_args))
               end
-            end
-            local ok, fallback = pcall(prepare_fallback, params)
-            if ok and fallback then res = { fallback } end
+              return finish()
+            end, unpack(req_args))
           end
-          return inner(err, res, ...)
+          return finish()
         end
         handler = on_result
       end
