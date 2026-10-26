@@ -21,6 +21,29 @@ return {
     { "<leader>gd", "<cmd>DiffviewOpen --imply-local<cr>", desc = "Diff" },
     { "<leader>gf", "<cmd>DiffviewFileHistory %<cr>", desc = "File History" },
     { "<leader>gh", "<cmd>DiffviewFileHistory<cr>", desc = "Repo History" },
+    {
+      "<leader>gF",
+      function()
+        local modes = {
+          { flag = "-G", label = "Any changed line containing it" },
+          { flag = "-S", label = "Occurrences added or removed" },
+        }
+        vim.ui.select(modes, {
+          prompt = "Search type",
+          format_item = function(mode) return mode.flag .. "  " .. mode.label end,
+        }, function(mode)
+          if not mode then return end
+          vim.ui.input({ prompt = "Search history for exact text: " }, function(text)
+            if text == nil or text == "" then return end
+            -- Pass the args directly: the command line parser would split the text on whitespace.
+            -- Diffview treats both -S and -G as regexes, so escape the metacharacters to keep it literal
+            local pattern = text:gsub("[%^%$%(%)%.%[%]%*%+%?{}|\\]", "\\%0")
+            require("diffview").file_history(nil, { mode.flag .. pattern })
+          end)
+        end)
+      end,
+      desc = "Search repo history (exact text)",
+    },
     { "<leader>gt", "<cmd>DiffviewFileHistory -g --range=stash<cr>", desc = "View Stash" },
     -- { "<leader>gdm", "<cmd>DiffviewOpen origin/HEAD...HEAD --imply-local<cr>", desc = "Review" },
     {
