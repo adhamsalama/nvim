@@ -1,4 +1,20 @@
 return {
+  {
+    "rebelot/heirline.nvim",
+    opts = function(_, opts)
+      -- Shown in diffview windows (diff buffers and its panels) while whitespace is ignored
+      local component = {
+        condition = function()
+          local in_diffview = vim.wo.diff or vim.bo.filetype:match "^Diffview" ~= nil
+          return in_diffview and vim.tbl_contains(vim.opt.diffopt:get(), "iwhiteall")
+        end,
+        provider = " 󱁐 ignore ws ",
+        hl = { fg = "bg", bg = "yellow", bold = true },
+      }
+      table.insert(opts.statusline, 6, component)
+    end,
+  },
+  {
   "sindrets/diffview.nvim",
   keys = {
     -- { "<leader>gd", "<Nop>", desc = "Diffview" },
@@ -86,6 +102,21 @@ return {
     vim.opt.diffopt:append "algorithm:histogram"
     vim.opt.diffopt:append "indent-heuristic"
     vim.opt.diffopt:append "linematch:60"
+    vim.opt.diffopt:append "iwhiteall" -- on by default, toggle with <leader>gw
+
+    -- Re-indenting (e.g. wrapping code in try/catch) marks every line as changed whatever the algorithm is,
+    -- so offer a whitespace-insensitive toggle for the rendered diff
+    vim.keymap.set("n", "<leader>gw", function()
+      local on = vim.tbl_contains(vim.opt.diffopt:get(), "iwhiteall")
+      if on then
+        vim.opt.diffopt:remove "iwhiteall"
+      else
+        vim.opt.diffopt:append "iwhiteall"
+      end
+      vim.cmd.diffupdate()
+      vim.cmd.redrawstatus { bang = true }
+      vim.notify("Diff ignore whitespace: " .. (on and "off" or "on"), vim.log.levels.INFO)
+    end, { desc = "Toggle diff ignore whitespace" })
 
     -- Blend fg color into bg at given alpha (0.0 = all bg, 1.0 = all fg)
     local function blend(fg_hex, bg_hex, alpha)
@@ -327,4 +358,5 @@ return {
       },
     }
   end,
+},
 }
