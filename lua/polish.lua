@@ -69,6 +69,20 @@ _G.qftextfunc_no_col = function(info)
   return ret
 end
 
+-- Keep markdown code-fence backticks/language concealed in LSP hover & signature floats,
+-- even after stepping into the popup (K twice). Neovim stylizes these floats with the
+-- treesitter markdown parser (conceallevel=2) but hardcodes `concealcursor = ''`
+-- (runtime lua/vim/lsp/util.lua), so the fence on the cursor's line is revealed once the
+-- cursor enters the window. Re-enable concealcursor on the float so the fences stay hidden.
+do
+  local orig = vim.lsp.util.open_floating_preview
+  vim.lsp.util.open_floating_preview = function(...)
+    local bufnr, winnr = orig(...)
+    if winnr and vim.api.nvim_win_is_valid(winnr) then vim.wo[winnr].concealcursor = "nvic" end
+    return bufnr, winnr
+  end
+end
+
 -- Truncate long inlay hints for tsc to prevent multi-line wrapping
 do
   local max_len = 40
