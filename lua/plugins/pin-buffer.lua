@@ -1,5 +1,5 @@
 -- Pin the current buffer to the left of the tabline. Logic lives in
--- `lua/utils/pin_buffer.lua`; this file wires it into AstroNvim.
+-- `lua/utils/pin_buffer.lua`; this file wires it into AstroNvim and resession.
 
 ---@type LazySpec
 return {
@@ -27,28 +27,17 @@ return {
           desc = "Keep pinned buffers at the left of the tabline",
           callback = function() require("utils.pin_buffer").reorder() end,
         },
-        {
-          -- Load this cwd's saved pins on startup.
-          event = "VimEnter",
-          desc = "Load persisted buffer pins",
-          callback = function() require("utils.pin_buffer").refresh() end,
-        },
-        {
-          -- Sessions restore a different set of buffers (and possibly cwd), so
-          -- reload the matching pins and re-sort once the session is in.
-          event = "User",
-          pattern = "ResessionLoadPost",
-          desc = "Restore buffer pins after loading a session",
-          callback = function() require("utils.pin_buffer").refresh() end,
-        },
-        {
-          -- Pins are scoped per working directory; reload them on a global cd.
-          event = "DirChanged",
-          pattern = "global",
-          desc = "Reload buffer pins when the working directory changes",
-          callback = function() require("utils.pin_buffer").refresh() end,
-        },
       }
+    end,
+  },
+
+  -- Persist pins in sessions via `lua/resession/extensions/pin_buffer.lua`.
+  {
+    "stevearc/resession.nvim",
+    optional = true,
+    opts = function(_, opts)
+      opts.extensions = opts.extensions or {}
+      opts.extensions.pin_buffer = { enable_in_tab = true }
     end,
   },
 
