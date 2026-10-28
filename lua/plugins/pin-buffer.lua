@@ -18,19 +18,35 @@ return {
       }
 
       opts.autocmds = opts.autocmds or {}
-      -- Re-sort pinned buffers to the front whenever the tabline's buffer list
-      -- changes (new file opened, buffer closed, etc.).
       opts.autocmds.pin_buffer = {
         {
+          -- Re-sort pinned buffers to the front whenever the tabline's buffer
+          -- list changes (new file opened, buffer closed, etc.).
           event = "User",
           pattern = "AstroBufsUpdated",
           desc = "Keep pinned buffers at the left of the tabline",
           callback = function() require("utils.pin_buffer").reorder() end,
         },
         {
-          event = { "BufDelete", "BufWipeout" },
-          desc = "Forget pinned buffer when it is removed",
-          callback = function(args) require("utils.pin_buffer").forget(args.buf) end,
+          -- Load this cwd's saved pins on startup.
+          event = "VimEnter",
+          desc = "Load persisted buffer pins",
+          callback = function() require("utils.pin_buffer").refresh() end,
+        },
+        {
+          -- Sessions restore a different set of buffers (and possibly cwd), so
+          -- reload the matching pins and re-sort once the session is in.
+          event = "User",
+          pattern = "ResessionLoadPost",
+          desc = "Restore buffer pins after loading a session",
+          callback = function() require("utils.pin_buffer").refresh() end,
+        },
+        {
+          -- Pins are scoped per working directory; reload them on a global cd.
+          event = "DirChanged",
+          pattern = "global",
+          desc = "Reload buffer pins when the working directory changes",
+          callback = function() require("utils.pin_buffer").refresh() end,
         },
       }
     end,
