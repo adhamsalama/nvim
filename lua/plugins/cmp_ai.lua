@@ -31,11 +31,14 @@ return {
           prev = false, -- same
         },
       },
-      filetypes = {
-        ["*"] = function()
-          return not vim.fn.expand("%:t"):match("^%.env")
-        end,
-      },
+      -- `filetypes` functions get no bufnr (they'd read whatever buffer is current), so per-buffer checks live here
+      should_attach = function(bufnr, bufname)
+        if not vim.bo[bufnr].buflisted or vim.bo[bufnr].buftype ~= "" then return false end
+        if vim.fs.basename(bufname):match "^%.env" then return false end
+        -- skip huge files: with Copilot attached, tsc's memory climbs past 12GB on them
+        if vim.api.nvim_buf_line_count(bufnr) > 5000 then return false end
+        return true
+      end,
     },
     specs = {
       {
