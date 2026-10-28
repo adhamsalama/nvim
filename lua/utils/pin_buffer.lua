@@ -42,6 +42,10 @@ function M.toggle(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   pinned[bufnr] = not pinned[bufnr] or nil
   M.reorder()
+  -- reorder() only repaints when the buffer order changes, but toggling the pin
+  -- on an already-leftmost (or sole) buffer flips the icon without moving it, so
+  -- force a tabline redraw here to refresh the indicator immediately.
+  vim.cmd.redrawtabline()
 end
 
 -- Drop a buffer from the pinned set (call when it is deleted/wiped).
