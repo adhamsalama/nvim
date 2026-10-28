@@ -5,6 +5,39 @@
 -- NOTE: We highly recommend setting up the Lua Language Server (`:LspInstall lua_ls`)
 --       as this provides autocomplete and documentation while editing
 
+-- Session cache of each repo's "most frequently changed files", keyed by git root.
+-- Computed once per repo on the first <Leader>gC and reused for the rest of the session.
+local churn_cache = {}
+
+---@return snacks.picker.finder.Item[]? items, string? err
+local function git_churn_items()
+  local root = vim.fs.root(0, ".git") or vim.fn.getcwd()
+  if churn_cache[root] then return churn_cache[root] end
+
+  local output = vim.fn.systemlist { "git", "-C", root, "log", "--pretty=format:", "--name-only", "--diff-filter=d" }
+  if vim.v.shell_error ~= 0 then return nil, "Not a git repository" end
+
+  -- tally how often each path appears across the history
+  local counts, order = {}, {}
+  for _, file in ipairs(output) do
+    if file ~= "" then
+      if not counts[file] then table.insert(order, file) end
+      counts[file] = (counts[file] or 0) + 1
+    end
+  end
+
+  -- keep only paths that still exist, most-changed first
+  local items = {}
+  for _, file in ipairs(order) do
+    local path = root .. "/" .. file
+    if vim.fn.filereadable(path) == 1 then table.insert(items, { text = file, file = path, count = counts[file] }) end
+  end
+  table.sort(items, function(a, b) return a.count > b.count end)
+
+  if not vim.tbl_isempty(items) then churn_cache[root] = items end
+  return items
+end
+
 ---@type LazySpec
 return {
   "AstroNvim/astrocore",
@@ -113,7 +146,41 @@ return {
         },
         ["<Leader>gT"] = false,
         ["<leader>gc"] = false,
-        ["<leader>gC"] = false,
+        ["<Leader>gC"] = {
+          function()
+            local items, err = git_churn_items()
+            if err then
+              vim.notify(err, vim.log.levels.ERROR)
+              return
+            end
+            if not items or vim.tbl_isempty(items) then
+              vim.notify("No changed files found", vim.log.levels.WARN)
+              return
+            end
+
+            local width = #tostring(items[1].count)
+            require("snacks").picker.pick {
+              source = "git_churn",
+              title = "Most Frequently Changed Files",
+              items = items,
+              -- keep the churn order even while filtering, instead of sorting by match score
+              sort = function(a, b) return a.count > b.count end,
+              format = function(item)
+                return {
+                  { string.format("%" .. width .. "d", item.count), "Number" },
+                  { "  " },
+                  { vim.fn.fnamemodify(item.file, ":."), "SnacksPickerFile" },
+                }
+              end,
+              preview = "file",
+              confirm = function(picker, item)
+                picker:close()
+                if item then vim.cmd.edit(vim.fn.fnameescape(item.file)) end
+              end,
+            }
+          end,
+          desc = "Churn (most changed files)",
+        },
         -- tables with just a `desc` key will be registered with which-key if it's installed
         -- this is useful for naming menus
         -- ["<Leader>b"] = { desc = "Buffers" },
