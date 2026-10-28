@@ -7,6 +7,8 @@ return {
       opts.keymap["<Tab>"] = {
         "snippet_forward",
         function()
+          -- Claude ghost text (lua/plugins/claude-ghost.lua) when it's on, otherwise Copilot's via ai_accept
+          if require("utils.claude_ghost").accept() then return true end
           if vim.g.ai_accept then return vim.g.ai_accept() end
         end,
         "fallback",
