@@ -319,3 +319,6 @@ vim.api.nvim_create_autocmd("FileType", {
     end, { buffer = event.buf, desc = "Delete quickfix/location list entry" })
   end,
 })
+
+-- Closing a buffer only removes it from the current tab while another tab still has it
+require("utils.tab_buffer").setup()
