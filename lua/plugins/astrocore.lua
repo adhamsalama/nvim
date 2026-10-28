@@ -136,6 +136,15 @@ return {
           end,
           desc = "Close buffer from tabline",
         },
+        -- <Leader>Ss saves back into the loaded session; this always prompts for a new name
+        ["<Leader>Sa"] = {
+          function()
+            vim.ui.input({ prompt = "Save session as: " }, function(name)
+              if name and name ~= "" then require("resession").save(name) end
+            end)
+          end,
+          desc = "Save session as",
+        },
         ["<Leader>bt"] = {
           "<Nop>",
           desc = "Tabs",
