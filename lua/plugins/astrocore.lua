@@ -145,8 +145,39 @@ return {
           desc = "Create new tab",
         },
         ["<Leader>btc"] = {
-          "<cmd>tabclose<cr>",
-          desc = "Close tab",
+          function()
+            if #vim.api.nvim_list_tabpages() == 1 then
+              vim.notify("Cannot close the last tab", vim.log.levels.WARN)
+              return
+            end
+            local tab_bufs = vim.t.bufs or {}
+            vim.cmd.tabclose()
+
+            -- only wipe buffers that no remaining tab still lists or displays
+            local kept = {}
+            for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
+              for _, bufnr in ipairs(vim.t[tabpage].bufs or {}) do
+                kept[bufnr] = true
+              end
+            end
+            local skipped = 0
+            for _, bufnr in ipairs(tab_bufs) do
+              if
+                vim.api.nvim_buf_is_valid(bufnr)
+                and not kept[bufnr]
+                and vim.tbl_isempty(vim.fn.win_findbuf(bufnr))
+              then
+                -- non-forced delete refuses modified buffers and running terminals
+                if vim.bo[bufnr].modified or not pcall(vim.api.nvim_buf_delete, bufnr, {}) then
+                  skipped = skipped + 1
+                end
+              end
+            end
+            if skipped > 0 then
+              vim.notify(("Kept %d unsaved buffer(s) from the closed tab"):format(skipped), vim.log.levels.WARN)
+            end
+          end,
+          desc = "Close tab and its buffers",
         },
         ["<Leader>gT"] = false,
         ["<leader>gc"] = false,
