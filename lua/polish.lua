@@ -289,34 +289,45 @@ do
   end, { desc = "Debug LSP reference counts" })
 end
 
--- Add keymap to delete quickfix/location list entries with "dd"
+-- Delete quickfix/location list entries first..last (1-based, inclusive)
+local function qf_delete_range(first, last)
+  -- Check if this is a location list or quickfix list
+  local is_loclist = vim.fn.getloclist(0, { filewinid = 0 }).filewinid ~= 0
+
+  local items = is_loclist and vim.fn.getloclist(0, { items = 0 }).items or vim.fn.getqflist({ items = 0 }).items
+  for i = last, first, -1 do
+    table.remove(items, i)
+  end
+
+  if is_loclist then
+    vim.fn.setloclist(0, {}, "r", { items = items })
+  else
+    vim.fn.setqflist({}, "r", { items = items })
+  end
+
+  -- Restore cursor position
+  local new_last_line = vim.fn.line "$"
+  local target_line = math.min(first, new_last_line)
+  vim.fn.cursor(target_line, 0)
+end
+
+-- Add keymaps to delete quickfix/location list entries with "dd" and visual "d"
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "qf",
   callback = function(event)
     vim.keymap.set("n", "dd", function()
-      -- Get current line number
       local line = vim.fn.line "."
-
-      -- Check if this is a location list or quickfix list
-      local is_loclist = vim.fn.getloclist(0, { filewinid = 0 }).filewinid ~= 0
-
-      if is_loclist then
-        -- Location list
-        local items = vim.fn.getloclist(0, { items = 0 }).items
-        table.remove(items, line)
-        vim.fn.setloclist(0, {}, "r", { items = items })
-      else
-        -- Quickfix list
-        local items = vim.fn.getqflist({ items = 0 }).items
-        table.remove(items, line)
-        vim.fn.setqflist({}, "r", { items = items })
-      end
-
-      -- Restore cursor position
-      local new_last_line = vim.fn.line "$"
-      local target_line = math.min(line, new_last_line)
-      vim.fn.cursor(target_line, 0)
+      qf_delete_range(line, line)
     end, { buffer = event.buf, desc = "Delete quickfix/location list entry" })
+
+    vim.keymap.set("x", "d", function()
+      local first, last = vim.fn.line "v", vim.fn.line "."
+      if first > last then
+        first, last = last, first
+      end
+      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+      qf_delete_range(first, last)
+    end, { buffer = event.buf, desc = "Delete selected quickfix/location list entries" })
   end,
 })
 
