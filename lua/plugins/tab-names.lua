@@ -19,6 +19,37 @@ return {
         end,
         desc = "Rename tab",
       }
+
+      -- Keep plugin tabs (by name) to the right of regular tabs: a new plugin tab
+      -- moves to the end, and a new regular tab moves in front of the plugin tabs.
+      local plugin_tabs = { GitGraph = true, DB = true, kubectl = true }
+      opts.autocmds = opts.autocmds or {}
+      opts.autocmds.plugin_tabs_right = {
+        {
+          event = "TabNew",
+          desc = "Keep plugin tabs to the right",
+          callback = function()
+            -- plugins name their tab right after `tabnew`, so check once that's done
+            local tab = vim.api.nvim_get_current_tabpage()
+            vim.schedule(function()
+              -- `tabmove` acts on the current tab; skip if focus moved on (e.g. session restore)
+              if tab ~= vim.api.nvim_get_current_tabpage() then return end
+              if plugin_tabs[vim.t[tab].name] then
+                vim.cmd "tabmove $"
+              else
+                local nr = vim.api.nvim_tabpage_get_number(tab)
+                for i, t in ipairs(vim.api.nvim_list_tabpages()) do
+                  if i >= nr then break end
+                  if plugin_tabs[vim.t[t].name] then
+                    vim.cmd("tabmove " .. (i - 1))
+                    break
+                  end
+                end
+              end
+            end)
+          end,
+        },
+      }
     end,
   },
 
