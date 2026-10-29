@@ -7,7 +7,16 @@ return {
     keys = {
       {
         "<leader>tk",
-        function() require("kubectl").toggle { tab = true } end,
+        function()
+          local kubectl = require "kubectl"
+          local opening = not kubectl.is_open
+          kubectl.toggle { tab = true }
+          -- toggle opens the new tab synchronously, so it's current here
+          if opening then
+            vim.t.name = "kubectl"
+            vim.cmd.redrawtabline()
+          end
+        end,
         desc = "Toggle kubectl UI",
         mode = "n",
       },
