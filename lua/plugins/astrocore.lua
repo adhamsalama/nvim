@@ -189,6 +189,7 @@ return {
           desc = "Close tab and its buffers",
         },
         ["<Leader>gT"] = false,
+        ["<Leader>gg"] = false, -- AstroNvim's lazygit; <leader>gg opens the GitGraph workspace (gitgraph.lua)
         ["<leader>gc"] = false,
         ["<Leader>gC"] = {
           function()

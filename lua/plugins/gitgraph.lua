@@ -41,7 +41,7 @@ return {
   {
     "adhamsalama/gitgraph.nvim", -- the same repo name AstroNvim expects
     -- dev = true, -- tells AstroNvim to load the local version in dev mode
-    -- dir = "~/code/gitgraph.nvim", -- your local path to the plugin
+    dir = "~/code/gitgraph.nvim", -- your local path to the plugin
     opts = {
       symbols = {
         merge_commit = "M",
@@ -70,6 +70,16 @@ return {
         "<leader>gv",
         function() require("gitgraph").draw({}, {}) end,
         desc = "GitGraph - Draw",
+      },
+      {
+        "<leader>gG",
+        function() require("gitgraph.workspace").open() end,
+        desc = "GitGraph - Workspace",
+      },
+      {
+        "<leader>gg",
+        function() require("gitgraph.workspace").open() end,
+        desc = "GitGraph - Workspace",
       },
     },
   },
