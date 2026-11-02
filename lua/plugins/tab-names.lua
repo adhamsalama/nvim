@@ -22,7 +22,7 @@ return {
 
       -- Keep plugin tabs (by name) to the right of regular tabs: a new plugin tab
       -- moves to the end, and a new regular tab moves in front of the plugin tabs.
-      local plugin_tabs = { GitGraph = true, DB = true, kubectl = true }
+      local plugin_tabs = { GitGraph = true, DB = true, kubectl = true, HTTP = true }
       opts.autocmds = opts.autocmds or {}
       opts.autocmds.plugin_tabs_right = {
         {
