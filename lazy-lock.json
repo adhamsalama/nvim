@@ -16,6 +16,7 @@
   "cmp-dap": { "branch": "master", "commit": "ea92773e84c0ad3288c3bc5e452ac91559669087" },
   "codecompanion-history.nvim": { "branch": "main", "commit": "bc1b4fe06eaaf0aa2399be742e843c22f7f1652a" },
   "codecompanion.nvim": { "branch": "main", "commit": "b1cbe52ecd71e7b0ed43ac1dc6eb3aab4099db00" },
+  "conform.nvim": { "branch": "master", "commit": "016802de402556da54c36bd7359b441266b01cdd" },
   "copilot.lua": { "branch": "master", "commit": "7b89909d0647c89298de880255b287b01b7e5d34" },
   "crates.nvim": { "branch": "main", "commit": "694357861ec9ebf12475ddcdd04ea45a0923c32d" },
   "diffview.nvim": { "branch": "main", "commit": "4516612fe98ff56ae0415a259ff6361a89419b0a" },

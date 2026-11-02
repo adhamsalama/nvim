@@ -18,6 +18,7 @@ return {
         -- install formatters
         "stylua",
         "prettier",
+        "prettierd", -- JS/TS via conform (lua/plugins/conform.lua)
       },
     },
   },
