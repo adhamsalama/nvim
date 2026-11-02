@@ -126,6 +126,16 @@ return {
           desc = "Go to implementation",
           cond = "textDocument/implementation",
         },
+        -- AstroLSP re-applies LSP mappings to the *focused* buffer when a server registers capabilities
+        -- late (tsgo does), which clobbered Diffview's history-panel `gd` (open commit). Skip Diffview's own buffers.
+        gd = {
+          function() vim.lsp.buf.definition() end,
+          desc = "Show the definition of current symbol",
+          cond = function(client, bufnr)
+            return not vim.bo[bufnr].filetype:match "^Diffview"
+              and client:supports_method("textDocument/definition", bufnr)
+          end,
+        },
       },
     },
     -- mappings = {
