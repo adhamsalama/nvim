@@ -1,10 +1,13 @@
 -- On-demand tsgo features for files too big to run them buffer-wide:
 --   * function_hints(): inlay hints for the function under the cursor only. tsgo honours the
 --     request range, so one function costs milliseconds where the whole 19k-line file costs ~6s.
+--   * toggle_check(): per-file type checking via a `// @ts-check` line that lives in the buffer
+--     only; it is stripped before every write and put back after, so it never reaches disk.
 local M = {}
 
 local ns = vim.api.nvim_create_namespace "tsgo_function_hints"
 local anchor_ns = vim.api.nvim_create_namespace "tsgo_function_hints_anchor"
+local CHECK_LINE = "// @ts-check"
 
 local function tsgo(bufnr) return vim.lsp.get_clients({ bufnr = bufnr, name = "tsc" })[1] end
 
@@ -124,6 +127,89 @@ function M.function_hints()
     end,
   })
   render(bufnr)
+end
+
+---------------------------------------------------------------------------------------------------
+-- Per-file type checking
+---------------------------------------------------------------------------------------------------
+
+local function has_check_line(bufnr) return vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1] == CHECK_LINE end
+
+local function set_check_line(bufnr, on)
+  local modified = vim.bo[bufnr].modified
+  if on then
+    vim.api.nvim_buf_set_lines(bufnr, 0, 0, false, { CHECK_LINE })
+  else
+    vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, {})
+  end
+  -- the line is never on disk, so it shouldn't make an unmodified buffer look modified
+  vim.bo[bufnr].modified = modified
+end
+
+--- Toggle type checking for this file only (a buffer-only `// @ts-check`).
+function M.toggle_check()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if not tsgo(bufnr) then return vim.notify("tsgo is not attached", vim.log.levels.WARN) end
+  if vim.b[bufnr].tsgo_check then
+    if has_check_line(bufnr) then set_check_line(bufnr, false) end
+    vim.b[bufnr].tsgo_check = false
+    return vim.notify "Type checking off (file)"
+  end
+  if has_check_line(bufnr) then return vim.notify "File already has // @ts-check" end
+  set_check_line(bufnr, true)
+  vim.b[bufnr].tsgo_check = true
+  vim.notify "Type checking on (file)"
+
+  if vim.b[bufnr].tsgo_check_autocmds then return end
+  vim.b[bufnr].tsgo_check_autocmds = true
+  local group = vim.api.nvim_create_augroup("tsgo_check_" .. bufnr, { clear = true })
+  -- keep the line out of the file: drop it before the write, restore it after
+  vim.api.nvim_create_autocmd("BufWritePre", {
+    group = group,
+    buffer = bufnr,
+    callback = function()
+      -- only ever set the flag here: conform's re-write after an async format runs while the line
+      -- is already out, and must not forget that it has to come back
+      if vim.b[bufnr].tsgo_check and has_check_line(bufnr) then
+        vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, {})
+        vim.b[bufnr].tsgo_check_stripped = true
+      end
+    end,
+  })
+  local function restore()
+    if not vim.api.nvim_buf_is_valid(bufnr) or not vim.b[bufnr].tsgo_check_stripped then return end
+    vim.b[bufnr].tsgo_check_stripped = false
+    if has_check_line(bufnr) then return end
+    local modified = vim.bo[bufnr].modified
+    vim.api.nvim_buf_set_lines(bufnr, 0, 0, false, { CHECK_LINE })
+    vim.bo[bufnr].modified = modified
+  end
+  vim.api.nvim_create_autocmd("BufWritePost", {
+    group = group,
+    buffer = bufnr,
+    callback = function()
+      -- conform formats large files asynchronously after the write and discards its result if the
+      -- buffer changed meanwhile, so wait for it rather than re-inserting the line straight away
+      if not vim.b[bufnr].tsgo_check_conform_pending then restore() end
+    end,
+  })
+  vim.api.nvim_create_autocmd("User", {
+    group = group,
+    pattern = "ConformFormatPre",
+    callback = function(args)
+      if args.buf == bufnr then vim.b[bufnr].tsgo_check_conform_pending = true end
+    end,
+  })
+  vim.api.nvim_create_autocmd("User", {
+    group = group,
+    pattern = "ConformFormatPost",
+    callback = function()
+      -- (fires from the job callback, so the current buffer may be any buffer)
+      if not vim.api.nvim_buf_is_valid(bufnr) or not vim.b[bufnr].tsgo_check_conform_pending then return end
+      vim.b[bufnr].tsgo_check_conform_pending = false
+      vim.schedule(restore) -- after conform applies the edits and re-writes the file
+    end,
+  })
 end
 
 return M

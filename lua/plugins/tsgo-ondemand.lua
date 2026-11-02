@@ -17,6 +17,11 @@ return {
               function() require("utils.tsgo_ondemand").function_hints() end,
               "Toggle inlay hints (function)"
             )
+            map(
+              "<Leader>lT",
+              function() require("utils.tsgo_ondemand").toggle_check() end,
+              "Toggle type checking (file)"
+            )
           end,
         },
       },
