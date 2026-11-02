@@ -31,6 +31,9 @@ return {
       disabled = { -- disable formatting capabilities for the listed language servers
         -- disable lua_ls formatting capability if you want to use StyLua to format your lua code
         -- "lua_ls",
+        -- prettier (none-ls) is the JS/TS formatter; tsgo's formatter disagrees with it, so both
+        -- running on save meant prettier rewrote the whole file every time
+        "tsc",
       },
       timeout_ms = 1000, -- default format timeout
       -- filter = function(client) -- fully override the default formatting function
