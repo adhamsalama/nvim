@@ -125,6 +125,9 @@ return {
     vim.opt.diffopt:append "algorithm:histogram"
     vim.opt.diffopt:append "indent-heuristic"
     vim.opt.diffopt:append "linematch:60"
+    -- NOTE: iwhiteall + inline:char (0.12 default) breaks inline highlighting when a hunk's line counts differ,
+    -- e.g. `a: 1` -> `a: 1,` + new line: the edited line renders as fully added instead of highlighting the comma.
+    -- `iwhite` avoids this but stops ignoring whitespace added where there was none (`a,b` -> `a, b`, `x` -> `  x`).
     vim.opt.diffopt:append "iwhiteall" -- on by default, toggle with <leader>gw
 
     -- Re-indenting (e.g. wrapping code in try/catch) marks every line as changed whatever the algorithm is,
