@@ -91,15 +91,33 @@ return {
           for _, client in ipairs(clients) do
             names[client.name] = true
           end
-          -- stop the clients, then re-enable once they've fully exited
-          vim.lsp.stop_client(clients)
-          vim.defer_fn(function()
-            for client_name in pairs(names) do
-              vim.lsp.enable(client_name, false)
-              vim.lsp.enable(client_name, true)
-            end
-            vim.notify("Restarted LSP: " .. table.concat(vim.tbl_keys(names), ", "), vim.log.levels.INFO)
-          end, 500)
+          -- Graceful stop, force-killed after 3s. exit_timeout defaults to false, so a
+          -- plain stop never kills a server that ignores `exit` (tsgo) and it leaks.
+          for _, client in ipairs(clients) do
+            client:stop(3000)
+          end
+          -- re-enable only once every old process has actually exited
+          local timer = assert(vim.uv.new_timer())
+          local waited = 0
+          timer:start(
+            100,
+            100,
+            vim.schedule_wrap(function()
+              waited = waited + 100
+              local pending = vim.iter(clients):any(function(c) return not c:is_stopped() end)
+              if pending and waited < 5000 then return end
+              timer:stop()
+              timer:close()
+              if pending then
+                vim.notify("LSP client(s) did not exit; restarting anyway", vim.log.levels.WARN)
+              end
+              for client_name in pairs(names) do
+                vim.lsp.enable(client_name, false)
+                vim.lsp.enable(client_name, true)
+              end
+              vim.notify("Restarted LSP: " .. table.concat(vim.tbl_keys(names), ", "), vim.log.levels.INFO)
+            end)
+          )
         end,
         desc = "Restart active LSP clients (all, or a named one)",
         nargs = "?",
