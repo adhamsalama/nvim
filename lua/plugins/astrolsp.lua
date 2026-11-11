@@ -83,6 +83,17 @@ return {
           },
         },
       },
+      -- yamlls comes from astrocommunity.pack.yaml (which merges SchemaStore schemas on top of this).
+      -- k8s manifests have arbitrary filenames, so apply the built-in Kubernetes schema to every YAML file.
+      yamlls = {
+        settings = {
+          yaml = {
+            schemas = {
+              kubernetes = { "*.yaml", "*.yml" },
+            },
+          },
+        },
+      },
     },
     -- customize how language servers are attached
     handlers = {
