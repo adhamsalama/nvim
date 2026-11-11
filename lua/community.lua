@@ -15,6 +15,7 @@ return {
   -- { import = "astrocommunity.pack.java" },
   { import = "astrocommunity.pack.python" },
   { import = "astrocommunity.pack.rust" },
+  { import = "astrocommunity.pack.yaml" },
   -- Programming related stuff
   { import = "astrocommunity.pack.full-dadbod" },
   { import = "astrocommunity.docker.lazydocker" },
