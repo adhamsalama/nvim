@@ -48,6 +48,18 @@ local function close_when_tab_gone()
   })
 end
 
+-- KNOWN BUG: the pod exec terminal (k8s_exec) never tells the pod its size.
+-- Since V2.0.0 (c47ff81), exec goes through the plugin's Rust client (kube-rs) and
+-- nvim_open_term instead of `kubectl exec -it`. The session has no resize method, so the
+-- remote PTY stays at 0x0 (`stty size` -> "0 0").
+-- Symptoms: anything that redraws by terminal width breaks. Node REPL (and mongosh)
+-- previews/autocomplete redraw on a new line with each key; Python 3.13+ pyrepl likely
+-- too; vi/less/top misrender; long lines wrap badly in bash/python readline.
+-- Started here on 2026-05-23, when lazy-lock moved from 47e8d73 (pre-V2) to e6ab7c0.
+-- Workarounds (in the pod shell): `stty cols 200 rows 50`, `TERM=dumb node`, or
+-- `PYTHON_BASIC_REPL=1 python`. Or set `terminal_cmd` to use a real `kubectl exec -it`.
+-- Proper fix (upstream): expose AttachedProcess::terminal_size() as a session resize
+-- method and call it on WinResized, as the dashboard session already does.
 return {
   {
     "ramilito/kubectl.nvim",
