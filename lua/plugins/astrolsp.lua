@@ -179,13 +179,13 @@ return {
     -- },
     -- A custom `on_attach` function to be run after the default `on_attach` function
     -- takes two parameters `client` and `bufnr`  (`:h lspconfig-setup`)
-    on_attach = function(client, bufnr)
-      -- Inlay hints type-check the whole visible range on every change; on huge files (e.g. a
-      -- 19k-line service) that keeps the server busy and its memory high. Off for the buffer only,
-      -- toggle back with <Leader>uh.
-      if client:supports_method("textDocument/inlayHint", bufnr) and vim.api.nvim_buf_line_count(bufnr) > 5000 then
-        vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
-      end
-    end,
+    -- on_attach = function(client, bufnr)
+    --   -- Inlay hints type-check the whole visible range on every change; on huge files (e.g. a
+    --   -- 19k-line service) that keeps the server busy and its memory high. Off for the buffer only,
+    --   -- toggle back with <Leader>uh.
+    --   if client:supports_method("textDocument/inlayHint", bufnr) and vim.api.nvim_buf_line_count(bufnr) > 5000 then
+    --     vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
+    --   end
+    -- end,
   },
 }
