@@ -6,6 +6,7 @@
 --   * codelens off (see the lsp_codelens_refresh autocmd in astrolsp.lua)
 --   * documentHighlight off (snacks.words, which AstroNvim only gates on its own large_buf limits)
 --   * diagnostic pulls debounced, held during insert mode (lua/utils/lsp_diag_debounce.lua)
+--   * inlay hints for the visible lines only, one request at a time (lua/utils/lsp_inlay_range.lua)
 -- Hover, definition and completion are untouched. Flag: `vim.b.lsp_lite`.
 
 local max_lines = 2000
@@ -21,6 +22,7 @@ return {
   ---@param opts AstroCoreOpts
   opts = function(_, opts)
     require("utils.lsp_diag_debounce").setup()
+    require("utils.lsp_inlay_range").setup { is_lite = mark }
     opts.autocmds = opts.autocmds or {}
     opts.autocmds.large_buf_lsp = {
       {
