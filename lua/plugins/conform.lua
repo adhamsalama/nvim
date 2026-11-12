@@ -4,8 +4,6 @@
 -- warm (it uses the project's own node_modules prettier when present). Other filetypes are untouched.
 local js_fts = { "javascript", "javascriptreact", "typescript", "typescriptreact" }
 
-local function is_large(bufnr) return vim.api.nvim_buf_line_count(bufnr) > 3000 end
-
 local function should_format(bufnr)
   if not vim.tbl_contains(js_fts, vim.bo[bufnr].filetype) then return false end
   -- respect AstroNvim's <Leader>uf / <Leader>uF autoformat toggles
@@ -51,14 +49,11 @@ return {
       end
       return {
         formatters_by_ft = formatters_by_ft,
-        -- Small files format synchronously before the write. Large ones (prettier alone takes
-        -- 0.5-3s on a 19k-line file) format asynchronously after it, so nvim never blocks; conform
-        -- re-writes the buffer once the result lands.
+        -- Always format synchronously before the write (warm prettierd: ~0.1s on a 7k-line file).
+        -- Don't use format_after_save: its unformatted write + edits + second write left tsgo's
+        -- copy of the open file out of sync (hover/definitions pointed at the wrong lines).
         format_on_save = function(bufnr)
-          if should_format(bufnr) and not is_large(bufnr) then return { timeout_ms = 3000, lsp_format = "never" } end
-        end,
-        format_after_save = function(bufnr)
-          if should_format(bufnr) and is_large(bufnr) then return { lsp_format = "never" } end
+          if should_format(bufnr) then return { timeout_ms = 3000, lsp_format = "never" } end
         end,
       }
     end,
