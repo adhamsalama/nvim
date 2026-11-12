@@ -43,11 +43,29 @@ local function in_flight(client, self_id)
   return list
 end
 
+-- One lookup per client at a time, result reused for `mem_ttl_ms`: a burst of slow requests (e.g.
+-- dozens of cancelled diagnostics) would otherwise spawn a shell each and exhaust file descriptors.
+M.mem_ttl_ms = 5000
+---@type table<integer, {value: string?, at: integer?, waiters: function[]?}>
+local mem_cache = {}
+
 -- macOS `ps` RSS is misleading for Go's heap; `footprint` reports what Activity Monitor shows.
 ---@param client vim.lsp.Client
 local function server_mem(client, cb)
   local argv = type(client.config.cmd) == "table" and client.config.cmd or nil
   if not argv then return cb "?" end
+  local c = mem_cache[client.id] or {}
+  mem_cache[client.id] = c
+  if c.waiters then return table.insert(c.waiters, cb) end
+  if c.at and ms_since(c.at) < M.mem_ttl_ms then return cb(c.value) end
+  c.waiters = { cb }
+  local function done(mem)
+    local waiters = c.waiters or {}
+    c.value, c.at, c.waiters = mem, vim.uv.hrtime(), nil
+    for _, w in ipairs(waiters) do
+      w(mem)
+    end
+  end
   -- find nvim's child whose command line contains the server's basename + args (a launcher
   -- may exec a different path), then read its footprint; one async shell, no blocking waits
   local script = [[
@@ -57,10 +75,12 @@ for p in $(pgrep -P "$0"); do
   if [ $ok = 1 ]; then footprint "$p" | sed -n 's/.*Footprint: \([0-9.]* [A-Za-z]*\).*/\1/p' | head -1; exit; fi
 done]]
   local cmd = { "sh", "-c", script, tostring(vim.fn.getpid()), vim.fs.basename(argv[1]), unpack(argv, 2) }
-  vim.system(cmd, { text = true }, function(res)
+  -- vim.system throws synchronously on spawn failure (EMFILE etc.); don't let that break the timer
+  local ok = pcall(vim.system, cmd, { text = true }, function(res)
     local mem = vim.trim(res.stdout or "")
-    cb(mem ~= "" and mem or "?")
+    vim.schedule(function() done(mem ~= "" and mem or "?") end)
   end)
+  if not ok then done "?" end
 end
 
 M.server_mem = server_mem -- exposed for testing
