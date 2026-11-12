@@ -119,12 +119,19 @@ end
 -- LSP reference counts shown as virtual lines above functions
 do
   local ns = vim.api.nvim_create_namespace "lsp_ref_count"
-  local filetypes = {
-    typescript = true,
-    javascript = true,
-    typescriptreact = true,
-    javascriptreact = true,
-    go = true,
+  -- Works in any buffer whose LSP supports references. Languages with a Treesitter query below use it (so e.g. arrow
+  -- functions assigned to variables get a count); every other language falls back to LSP document symbols.
+  local function supported(bufnr)
+    return #vim.lsp.get_clients { bufnr = bufnr, method = "textDocument/references" } > 0
+  end
+  local symbol_kinds = { -- LSP SymbolKind values that get a count in the documentSymbol fallback
+    [5] = true, -- Class
+    [6] = true, -- Method
+    [9] = true, -- Constructor
+    [10] = true, -- Enum
+    [11] = true, -- Interface
+    [12] = true, -- Function
+    [23] = true, -- Struct
   }
   local lang_map = { typescriptreact = "tsx", javascriptreact = "javascript" }
 
@@ -149,8 +156,10 @@ do
   local queries = {}
   local function get_query(lang)
     if queries[lang] == nil then
-      local str = query_strs[lang] or query_strs.javascript
-      local ok, q = pcall(vim.treesitter.query.parse, lang, str)
+      local ok, q = false, nil
+      if query_strs[lang] then
+        ok, q = pcall(vim.treesitter.query.parse, lang, query_strs[lang])
+      end
       queries[lang] = ok and q or false
     end
     return queries[lang]
@@ -159,56 +168,87 @@ do
   local enabled = false
   local tokens = {}
 
+  -- Calls cb with a list of { row, col } (0-based) for every definition that should get a count.
+  local function get_positions(bufnr, cb)
+    local ft = vim.bo[bufnr].filetype
+    local lang = lang_map[ft] or ft
+    local query = get_query(lang)
+    if query then
+      local ok, parser = pcall(vim.treesitter.get_parser, bufnr, lang)
+      local tree = ok and parser and parser:parse()[1]
+      if not tree then return end
+      local positions = {}
+      for _, node in query:iter_captures(tree:root(), bufnr, 0, -1) do
+        local row, col = node:start()
+        table.insert(positions, { row, col })
+      end
+      return cb(positions)
+    end
+
+    local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
+    vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(results)
+      local positions, seen = {}, {}
+      local function walk(symbols)
+        for _, sym in ipairs(symbols or {}) do
+          -- DocumentSymbol has selectionRange; SymbolInformation only has location.range
+          local range = sym.selectionRange or (sym.location and sym.location.range)
+          if range and symbol_kinds[sym.kind] then
+            local key = range.start.line .. ":" .. range.start.character
+            if not seen[key] then
+              seen[key] = true
+              table.insert(positions, { range.start.line, range.start.character })
+            end
+          end
+          walk(sym.children)
+        end
+      end
+      for _, res in pairs(results) do
+        walk(res.result)
+      end
+      cb(positions)
+    end)
+  end
+
   local function refresh(bufnr)
     bufnr = bufnr or vim.api.nvim_get_current_buf()
     if not enabled then return end
-    if not filetypes[vim.bo[bufnr].filetype] then return end
-    if #vim.lsp.get_clients { bufnr = bufnr } == 0 then return end
-
-    local ft = vim.bo[bufnr].filetype
-    local lang = lang_map[ft] or ft
-    local ok, parser = pcall(vim.treesitter.get_parser, bufnr, lang)
-    if not ok then return end
-
-    local tree = parser:parse()[1]
-    if not tree then return end
-
-    local query = get_query(lang)
-    if not query then return end
+    if not supported(bufnr) then return end
 
     local token = {}
     tokens[bufnr] = token
-    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-
-    for _, node in query:iter_captures(tree:root(), bufnr, 0, -1) do
-      local row, col = node:start()
-      local indent = vim.fn.indent(row + 1)
-      local params = {
-        textDocument = vim.lsp.util.make_text_document_params(bufnr),
-        position = { line = row, character = col },
-        context = { includeDeclaration = false },
-      }
-      vim.lsp.buf_request_all(bufnr, "textDocument/references", params, function(results)
-        if tokens[bufnr] ~= token or not vim.api.nvim_buf_is_valid(bufnr) then return end
-        local seen = {}
-        local count = 0
-        for _, res in pairs(results) do
-          for _, ref in ipairs(res.result or {}) do
-            local key = (ref.uri or "") .. ref.range.start.line .. ":" .. ref.range.start.character
-            if not seen[key] then
-              seen[key] = true
-              count = count + 1
+    get_positions(bufnr, function(positions)
+      if tokens[bufnr] ~= token or not vim.api.nvim_buf_is_valid(bufnr) then return end
+      vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+      for _, pos in ipairs(positions) do
+        local row, col = pos[1], pos[2]
+        local indent = vim.fn.indent(row + 1)
+        local params = {
+          textDocument = vim.lsp.util.make_text_document_params(bufnr),
+          position = { line = row, character = col },
+          context = { includeDeclaration = false },
+        }
+        vim.lsp.buf_request_all(bufnr, "textDocument/references", params, function(results)
+          if tokens[bufnr] ~= token or not vim.api.nvim_buf_is_valid(bufnr) then return end
+          local seen = {}
+          local count = 0
+          for _, res in pairs(results) do
+            for _, ref in ipairs(res.result or {}) do
+              local key = (ref.uri or "") .. ref.range.start.line .. ":" .. ref.range.start.character
+              if not seen[key] then
+                seen[key] = true
+                count = count + 1
+              end
             end
           end
-        end
-        local label = count == 1 and "1 reference" or (count .. " references")
-        local padding = string.rep(" ", indent)
-        vim.api.nvim_buf_set_extmark(bufnr, ns, row, 0, {
-          virt_lines = { { { padding .. label, "Comment" } } },
-          virt_lines_above = true,
-        })
-      end)
-    end
+          local label = count == 1 and "1 reference" or (count .. " references")
+          local padding = string.rep(" ", indent)
+          vim.api.nvim_buf_set_extmark(bufnr, ns, row, 0, {
+            virt_lines = { { { padding .. label, "Comment" } } },
+            virt_lines_above = true,
+          })
+        end)
+      end
+    end)
   end
 
   local timers = {}
@@ -222,7 +262,7 @@ do
 
   vim.api.nvim_create_autocmd("BufEnter", {
     callback = function(args)
-      if not filetypes[vim.bo[args.buf].filetype] then return end
+      if not supported(args.buf) then return end
       local marks = vim.api.nvim_buf_get_extmarks(args.buf, ns, 0, -1, { limit = 1 })
       if #marks == 0 then schedule_refresh(args.buf) end
     end,
@@ -230,13 +270,13 @@ do
 
   vim.api.nvim_create_autocmd({ "BufWritePost", "InsertLeave" }, {
     callback = function(args)
-      if filetypes[vim.bo[args.buf].filetype] then schedule_refresh(args.buf) end
+      if supported(args.buf) then schedule_refresh(args.buf) end
     end,
   })
 
   vim.api.nvim_create_autocmd("LspAttach", {
     callback = function(args)
-      if filetypes[vim.bo[args.buf].filetype] then schedule_refresh(args.buf) end
+      if supported(args.buf) then schedule_refresh(args.buf) end
     end,
   })
 

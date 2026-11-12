@@ -80,6 +80,10 @@ return {
               functionLikeReturnTypes = { enabled = true },
               enumMemberValues = { enabled = true },
             },
+            -- Upstream lsp/tsc.lua enables these since lspconfig bcf945ab; keep them off (merged settings win).
+            -- Reference counts come from the <leader>lt toggle in polish.lua instead.
+            referencesCodeLens = { enabled = false },
+            implementationsCodeLens = { enabled = false },
           },
         },
       },
