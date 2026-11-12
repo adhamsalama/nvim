@@ -17,7 +17,11 @@ return {
               if not vim.api.nvim_buf_is_valid(args.buf) then return end
               vim.keymap.set("n", "grr", function() require("utils.tsgo").references() end, {
                 buffer = args.buf,
-                desc = "References (follow exports)",
+                desc = "References (scoped to enclosing function on a use)",
+              })
+              vim.keymap.set("n", "grR", function() require("utils.tsgo").references { all = true } end, {
+                buffer = args.buf,
+                desc = "References (all, follow exports)",
               })
             end)
           end,
