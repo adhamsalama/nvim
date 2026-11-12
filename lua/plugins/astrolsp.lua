@@ -57,6 +57,10 @@ return {
       -- except `settings` and let upstream provide cmd/filetypes/root_markers.
       tsc = {
         cmd = { "tsc", "--lsp", "--stdio" },
+        -- tsgo is a Go program. GOGC=25 collects at 1.25x the live heap (default 2x), trading some
+        -- CPU for memory. GOMEMLIMIT is a soft ceiling: near it the GC runs nonstop, so keep it well
+        -- above the live heap or requests stall.
+        cmd_env = { GOGC = "25", GOMEMLIMIT = "8GiB" },
         filetypes = {
           "javascript",
           "javascriptreact",
