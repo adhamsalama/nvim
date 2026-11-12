@@ -8,6 +8,10 @@
 local M = {}
 
 M.threshold_ms = 5000
+-- Notifications are batched: flushed once nothing new arrived for `debounce_ms`, or at most
+-- `max_wait_ms` after the first one queued, so a burst of slow requests yields one popup.
+M.debounce_ms = 1000
+M.max_wait_ms = 3000
 M.log_path = vim.fn.stdpath "state" .. "/lsp_slow.log"
 
 -- Background requests are logged but don't pop up warnings (same list as the statusline spinner).
@@ -61,6 +65,33 @@ end
 
 M.server_mem = server_mem -- exposed for testing
 
+---@type {warn: string[], info: string[], in_flight: string?}
+local queued = { warn = {}, info = {} }
+local gen, first_at = 0, nil
+
+local function flush()
+  local q = queued
+  queued, first_at = { warn = {}, info = {} }, nil
+  if #q.warn > 0 then
+    local title = #q.warn > 1 and (#q.warn .. " slow LSP requests") or "Slow LSP request"
+    vim.notify(table.concat(q.warn, "\n") .. "\nin flight: " .. q.in_flight, vim.log.levels.WARN, { title = title })
+  end
+  if #q.info > 0 then vim.notify(table.concat(q.info, "\n")) end
+end
+
+---@param kind "warn"|"info"
+local function queue(kind, msg, now_in_flight)
+  table.insert(queued[kind], msg)
+  if now_in_flight then queued.in_flight = now_in_flight end
+  first_at = first_at or vim.uv.hrtime()
+  gen = gen + 1
+  local my = gen
+  local wait = math.max(0, math.min(M.debounce_ms, M.max_wait_ms - ms_since(first_at)))
+  vim.defer_fn(function()
+    if my == gen then flush() end
+  end, wait)
+end
+
 local function append(line)
   local f = io.open(M.log_path, "a")
   if f then
@@ -95,17 +126,16 @@ local function on_request(args)
       if quiet[r.method] or r.cancelled_at then return end
       r.warned = true
       local now = in_flight(client, d.request_id)
-      vim.notify(
+      queue(
+        "warn",
         string.format(
-          "%s: %s waiting > %ds%s\nin flight: %s",
+          "%s: %s waiting > %ds%s",
           r.client,
           short(r.method),
           M.threshold_ms / 1000,
-          r.where and (" at " .. r.where) or "",
-          #now > 0 and table.concat(now, ", ") or "nothing else"
+          r.where and (" at " .. r.where) or ""
         ),
-        vim.log.levels.WARN,
-        { title = "Slow LSP request" }
+        #now > 0 and table.concat(now, ", ") or "nothing else"
       )
     end, M.threshold_ms)
   elseif req.type == "cancel" then
@@ -129,7 +159,9 @@ local function on_request(args)
       table.concat(r.in_flight, ", ")
     )
     append(line)
-    if r.warned then vim.notify(string.format("%s: %s replied after %.1fs", r.client, short(r.method), dur / 1000)) end
+    if r.warned then
+      queue("info", string.format("%s: %s replied after %.1fs", r.client, short(r.method), dur / 1000))
+    end
   end
 end
 
