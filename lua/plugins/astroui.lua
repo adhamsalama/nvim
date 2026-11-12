@@ -25,6 +25,9 @@ return {
         ["@lsp.typemod.variable.definition"] = { fg = "#7FBBB3" },
         ["@lsp.type.parameter"] = { fg = "#35A77C" },
         ["@lsp.type.namespace"] = { fg = "#E69875" },
+        -- treesitter equivalents (used when no LSP semantic tokens are available)
+        ["@variable.parameter"] = { fg = "#35A77C" },
+        ["@module"] = { fg = "#E69875" },
       },
     },
     -- Icons can be configured throughout the interface
