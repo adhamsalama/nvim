@@ -36,7 +36,7 @@ return {
         if not vim.bo[bufnr].buflisted or vim.bo[bufnr].buftype ~= "" then return false end
         if vim.fs.basename(bufname):match "^%.env" then return false end
         -- skip huge files: with Copilot attached, tsc's memory climbs past 12GB on them
-        if vim.api.nvim_buf_line_count(bufnr) > 5000 then return false end
+        -- if vim.api.nvim_buf_line_count(bufnr) > 5000 then return false end
         return true
       end,
     },
