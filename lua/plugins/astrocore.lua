@@ -145,6 +145,9 @@ return {
         [">b"] = { function() require("astrocore.buffer").move(vim.v.count1) end, desc = "Move buffer right" },
         ["<b"] = { function() require("astrocore.buffer").move(-vim.v.count1) end, desc = "Move buffer left" },
 
+        -- list all snacks picker sources
+        ["<Leader>F"] = { function() Snacks.picker() end, desc = "Find pickers" },
+
         -- mappings seen under group name "Buffer"
         ["<Leader>bd"] = {
           function()
