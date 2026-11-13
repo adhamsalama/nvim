@@ -1,72 +1,64 @@
-return {
-  dir = vim.fn.stdpath "config",
-  name = "quickfix-history",
-  lazy = false,
-  dependencies = { "nvim-telescope/telescope.nvim" },
-  config = function()
-    vim.keymap.set("n", "<leader>fq", function()
-      local lists = {}
-      local total = vim.fn.getqflist({ nr = "$" }).nr
-      local current = vim.fn.getqflist({ nr = 0 }).nr
-      for i = 1, total do
-        local list = vim.fn.getqflist({ nr = i, title = 0, size = 0, items = 0 })
-        local first = list.items and list.items[1]
-        local hint = first and vim.fn.bufname(first.bufnr) or ""
-        hint = hint ~= "" and hint:gsub("^" .. vim.fn.getcwd() .. "/", "") or hint
-        local marker = i == current and " *" or ""
-        table.insert(lists, { nr = i, title = list.title, size = list.size, hint = hint, marker = marker })
+local function quickfix_history()
+  local total = vim.fn.getqflist({ nr = "$" }).nr
+  local current = vim.fn.getqflist({ nr = 0 }).nr
+  local items = {}
+  for i = 1, total do
+    local list = vim.fn.getqflist { nr = i, title = 0, size = 0, items = 0 }
+    local first = list.items and list.items[1]
+    local file = first and first.bufnr > 0 and vim.api.nvim_buf_get_name(first.bufnr) or nil
+    local hint = file and vim.fn.fnamemodify(file, ":.") or ""
+    table.insert(items, {
+      nr = i,
+      current = i == current,
+      title = list.title,
+      size = list.size,
+      hint = hint,
+      text = list.title .. " " .. hint,
+      file = file ~= "" and file or nil,
+      pos = first and { math.max(first.lnum, 1), math.max(first.col - 1, 0) } or nil,
+    })
+  end
+  if vim.tbl_isempty(items) then
+    vim.notify("No quickfix lists", vim.log.levels.WARN)
+    return
+  end
+
+  require("snacks").picker.pick {
+    source = "quickfix_history",
+    title = "Quickfix History",
+    items = items,
+    sort = { fields = { "nr:desc" } },
+    format = function(item)
+      return {
+        { ("[%d]"):format(item.nr), "Number" },
+        { item.current and " * " or "   ", "Special" },
+        { item.title, "SnacksPickerLabel" },
+        { (" (%d items)  "):format(item.size), "Comment" },
+        { item.hint, "SnacksPickerFile" },
+      }
+    end,
+    preview = "file",
+    confirm = function(picker, item)
+      picker:close()
+      if not item then return end
+      local delta = item.nr - vim.fn.getqflist({ nr = 0 }).nr
+      if delta > 0 then
+        vim.cmd("silent cnewer " .. delta)
+      elseif delta < 0 then
+        vim.cmd("silent colder " .. -delta)
       end
+      vim.cmd "copen"
+    end,
+  }
+end
 
-      local conf = require("telescope.config").values
-      local previewer = require("telescope.previewers").new_buffer_previewer({
-        title = "Preview",
-        define_preview = function(self, entry)
-          local list = vim.fn.getqflist({ nr = entry.value.nr, items = 0 })
-          local first = list.items and list.items[1]
-          if not first or first.bufnr == 0 then return end
-          local filename = vim.fn.bufname(first.bufnr)
-          if filename == "" then return end
-          conf.buffer_previewer_maker(filename, self.state.bufnr, {
-            bufname = self.state.bufname,
-            winid = self.state.winid,
-            callback = function()
-              pcall(vim.api.nvim_win_set_cursor, self.state.winid, { first.lnum, first.col })
-            end,
-          })
-        end,
-      })
-
-      require("telescope.pickers").new({}, {
-        prompt_title = "Quickfix History",
-        previewer = previewer,
-        finder = require("telescope.finders").new_table({
-          results = lists,
-          entry_maker = function(entry)
-            local display =
-              string.format("[%d]%s %s (%d items)  %s", entry.nr, entry.marker, entry.title, entry.size, entry.hint)
-            return {
-              value = entry,
-              display = display,
-              ordinal = entry.title .. " " .. entry.hint,
-            }
-          end,
-        }),
-        sorter = conf.generic_sorter({}),
-        attach_mappings = function(prompt_bufnr, _)
-          require("telescope.actions").select_default:replace(function()
-            local selection = require("telescope.actions.state").get_selected_entry()
-            require("telescope.actions").close(prompt_bufnr)
-            local delta = selection.value.nr - vim.fn.getqflist({ nr = 0 }).nr
-            if delta > 0 then
-              vim.cmd("silent cnewer " .. delta)
-            elseif delta < 0 then
-              vim.cmd("silent colder " .. math.abs(delta))
-            end
-            vim.cmd "copen"
-          end)
-          return true
-        end,
-      }):find()
-    end, { desc = "Quickfix history picker" })
-  end,
+return {
+  "AstroNvim/astrocore",
+  opts = {
+    mappings = {
+      n = {
+        ["<Leader>fq"] = { quickfix_history, desc = "Quickfix history picker" },
+      },
+    },
+  },
 }
