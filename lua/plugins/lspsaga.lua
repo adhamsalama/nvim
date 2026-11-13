@@ -48,6 +48,13 @@ return {
   config = function(_, opts)
     require("lspsaga").setup(opts)
 
+    -- lspsaga jumps with vim.lsp.util.jump_to_location (callhierarchy.lua:256, typehierarchy.lua:256), deprecated
+    -- since Nvim 0.11: it warns on every jump and will be removed. Same behavior as Nvim's own wrapper, no warning.
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.lsp.util.jump_to_location = function(location, encoding, reuse_win)
+      return vim.lsp.util.show_document(location, encoding, { reuse_win = reuse_win, focus = true })
+    end
+
     -- lspsaga hardcodes the call-hierarchy float at half the screen height (callhierarchy.lua:380),
     -- which is cramped for deep trees. `layout:left` is the single chokepoint for both the initial
     -- render and `restore_last`, so raise the height there (width stays config-driven via left_width).
