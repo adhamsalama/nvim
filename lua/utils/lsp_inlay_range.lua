@@ -23,7 +23,7 @@ local method = "textDocument/inlayHint"
 local ns = vim.api.nvim_create_namespace "lsp_inlay_range"
 
 ---@type fun(bufnr: integer): boolean
-local is_lite = function() return false end
+local is_lite = function(_) return false end
 
 ---@class lsp_inlay_range.State
 ---@field timer uv.uv_timer_t

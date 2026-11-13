@@ -4,3 +4,7 @@ base: lua51
 globals:
   vim:
     any: true
+  bit: # LuaJIT bit library
+    any: true
+  Snacks: # global set by snacks.nvim
+    any: true
