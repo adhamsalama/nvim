@@ -57,7 +57,8 @@ return {
   opts = {
     mappings = {
       n = {
-        ["<Leader>fq"] = { quickfix_history, desc = "Quickfix history picker" },
+        ["<Leader>fq"] = { function() require("snacks").picker.qflist() end, desc = "Quickfix list" },
+        ["<Leader>fQ"] = { quickfix_history, desc = "Quickfix history picker" },
       },
     },
   },
