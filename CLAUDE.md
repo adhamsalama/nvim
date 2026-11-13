@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a personal Neovim configuration built on **AstroNvim v5+** with **Lazy.nvim** as the plugin manager. All user configuration lives in `lua/`.
+This is a personal Neovim configuration built on **AstroNvim v6** with **Lazy.nvim** as the plugin manager. All user configuration lives in `lua/`.
 
 ## Common Commands
 
@@ -44,7 +44,7 @@ cat lazy-lock.json | jq '.["plugin-name"]'
 
 Each file in `lua/plugins/` returns a Lazy.nvim spec (table or array of tables). Files with `.disabled` extension are ignored by Lazy.
 
-**Safe-disable pattern** — some files are active in the repo but suppressed with a guard at the top:
+**Safe-disable pattern** — a file can also be suppressed with a guard at the top (no file in `lua/plugins/` uses it currently):
 ```lua
 if true then return {} end -- WARN: REMOVE THIS LINE TO ACTIVATE THIS FILE
 ```
@@ -55,7 +55,7 @@ Remove that line to activate the file's plugin(s).
 - `<leader>a` — AI (Claude Code)
 - `<leader>g` — Git
 - `<leader>l` — LSP
-- `<leader>f` — Find/Telescope
+- `<leader>f` — Find (snacks picker)
 
 ### Code Style
 
