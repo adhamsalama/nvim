@@ -1,4 +1,7 @@
 -- LSP symbol pickers limited to named functions and methods
+
+local M = {}
+
 local kinds = { "Function", "Method" }
 local filter = { default = kinds, lua = kinds, markdown = kinds, help = kinds }
 
@@ -8,11 +11,11 @@ local function named(item)
   if name == "" or name:match "^anonymous" or name:match "%(%) callback$" then return false end
 end
 
-local function buffer_functions()
+function M.buffer()
   require("snacks").picker.lsp_symbols { title = "Functions/Methods", tree = false, filter = filter, transform = named }
 end
 
-local function workspace_functions()
+function M.workspace()
   require("snacks").picker.lsp_workspace_symbols {
     title = "Workspace Functions/Methods",
     filter = filter,
@@ -20,17 +23,4 @@ local function workspace_functions()
   }
 end
 
-return {
-  "AstroNvim/astrocore",
-  opts = {
-    commands = {
-      BufferFunctions = { buffer_functions, desc = "Pick named functions/methods in buffer" },
-      WorkspaceFunctions = { workspace_functions, desc = "Pick functions/methods in workspace" },
-    },
-    mappings = {
-      n = {
-        ["<Leader>lF"] = { buffer_functions, desc = "LSP Buffer Functions (Named)" },
-      },
-    },
-  },
-}
+return M

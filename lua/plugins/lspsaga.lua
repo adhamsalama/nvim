@@ -70,7 +70,7 @@ return {
     local fn_types =
       { arrow_function = true, function_expression = true, ["function"] = true, generator_function = true }
 
-    -- shared with the `grr` override (lua/plugins/tsgo-references.lua) via lua/lsp/tsgo/init.lua
+    -- shared with the `grr` override (lua/lsp/tsgo/references.lua) via lua/lsp/tsgo/init.lua
     local tsgo = require "lsp.tsgo"
     local load_buf, ts_node_at, ensure_attached = tsgo.load_buf, tsgo.ts_node_at, tsgo.ensure_attached
 

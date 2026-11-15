@@ -4,7 +4,7 @@
 --
 -- Wraps the private `vim.lsp.diagnostic._refresh` (re-check on Nvim upgrades):
 --   * all buffers: coalesce pulls within `delay_ms`
---   * long buffers (`vim.b.lsp_lite`, see large-buf-lsp.lua): longer delay, never while in insert
+--   * long buffers (`vim.b.lsp_lite`, see lua/lsp/perf/large_buf.lua): longer delay, never while in insert
 --     mode, and hidden buffers are only pulled when shown again
 
 local M = {}

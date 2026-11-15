@@ -132,7 +132,7 @@ return {
           -- the rest of the autocmd options (:h nvim_create_autocmd)
           desc = "Refresh codelens (buffer)",
           callback = function(args)
-            -- long files skip codelens (see large-buf-lsp.lua)
+            -- long files skip codelens (see lua/lsp/perf/large_buf.lua)
             if require("astrolsp").config.features.codelens and not vim.b[args.buf].lsp_lite then
               vim.lsp.codelens.enable(true, { bufnr = args.buf })
             end
