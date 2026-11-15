@@ -16,6 +16,7 @@ return {
   { import = "astrocommunity.pack.python" },
   { import = "astrocommunity.pack.rust" },
   { import = "astrocommunity.pack.yaml" },
+  { import = "astrocommunity.markdown-and-latex.render-markdown-nvim" },
   -- Programming related stuff
   { import = "astrocommunity.pack.full-dadbod" },
   { import = "astrocommunity.docker.lazydocker" },
