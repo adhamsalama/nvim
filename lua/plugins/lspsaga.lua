@@ -358,15 +358,39 @@ return {
     -- tsserver has no call hierarchy item for a function stored in an object property
     -- (`name: async () => {}` / `name: function () {}`), so prepare returns nothing. With the
     -- cursor on such a name, build the root item here and let references drive the expansion.
+    --
+    -- Any other identifier (a variable, constant, property) has no call hierarchy at all, so the root
+    -- becomes a `__var` item: its "incoming calls" are the functions it's referenced in.
+    local var_types = {
+      identifier = true,
+      property_identifier = true,
+      shorthand_property_identifier = true,
+      shorthand_property_identifier_pattern = true,
+    }
+    local function var_fallback(uri, bufnr, node)
+      if not (node and var_types[node:type()]) then return end
+      local row, col = node:start()
+      return {
+        name = text(node, bufnr),
+        kind = 13, -- Variable
+        uri = uri,
+        range = lsp_range(node),
+        selectionRange = lsp_range(node),
+        __ref_pos = { line = row, character = col },
+        __var = true,
+      }
+    end
+
     local function prepare_fallback(params)
       local uri = params.textDocument.uri
       local bufnr, node = ts_node_at(uri, params.position)
+      local start = node
       for _ = 1, 3 do
-        if not node then return end
+        if not node then break end
         local parent = node:parent()
         if parent and parent:type() == "pair" and parent:field("key")[1] == node then
           local value = parent:field("value")[1]
-          if not (value and fn_types[value:type()]) then return end
+          if not (value and fn_types[value:type()]) then break end
           local target = node:type() == "computed_property_name" and node:named_child(0) or node
           local row, col = target:start()
           return {
@@ -380,6 +404,39 @@ return {
         end
         node = parent
       end
+      return var_fallback(uri, bufnr, start)
+    end
+
+    -- Incoming "calls" of a `__var` root: its references, grouped by the named function each sits in
+    -- (anonymous callbacks are walked through to the named one). Each function entry expands to its
+    -- own callers via `request_references`; top-level uses become leaves named `path:line`.
+    local function request_var_references(client, item, handler)
+      local params = {
+        textDocument = { uri = item.uri },
+        position = item.__ref_pos,
+        context = { includeDeclaration = false },
+      }
+      return orig_request(client, "textDocument/references", params, function(err, locs, ...)
+        local calls, by_fn = {}, {}
+        for _, loc in ipairs(locs or {}) do
+          local ok, name, ref_pos = pcall(enclosing_name, loc.uri, loc.range.start)
+          local key = ok and name and ref_pos and ("%s:%d:%d"):format(loc.uri, ref_pos.line, ref_pos.character)
+          if key and by_fn[key] then
+            table.insert(by_fn[key].fromRanges, loc.range)
+          else
+            local entry = { kind = FUNCTION_KIND, uri = loc.uri, range = loc.range, selectionRange = loc.range }
+            if key then
+              entry.name, entry.__ref_pos = name, ref_pos
+            else
+              entry.name, entry.__ref_leaf = ("%s:%d"):format(rel_path(loc.uri), loc.range.start.line + 1), true
+            end
+            local call = { from = entry, fromRanges = { loc.range } }
+            calls[#calls + 1] = call
+            if key then by_fn[key] = call end
+          end
+        end
+        handler(err, calls, ...)
+      end)
     end
 
     -- tsserver only prepares a call hierarchy with the cursor exactly on the function's name. With it
@@ -418,9 +475,13 @@ return {
         if item.__ref_leaf then
           return vim.schedule(function() handler(nil, {}) end)
         end
+        if item.__var then return request_var_references(client, item, handler) end
         if item.__ref_pos then return request_references(client, item, handler) end
       end
       if method == "callHierarchy/outgoingCalls" and item and type(handler) == "function" then
+        if item.__var then
+          return vim.schedule(function() handler(nil, {}) end)
+        end
         if item.__out_synth or item.__ref_pos then return request_outgoing(client, item, handler) end
       end
       if method == "textDocument/prepareCallHierarchy" and type(handler) == "function" then
