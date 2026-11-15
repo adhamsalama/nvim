@@ -4,7 +4,8 @@
 --   * semantic tokens off (treesitter still highlights)
 --   * folds from treesitter instead of LSP foldingRange
 --   * codelens off (see the lsp_codelens_refresh autocmd in astrolsp.lua)
---   * documentHighlight off (snacks.words, which AstroNvim only gates on its own large_buf limits)
+--   * documentHighlight via lua/utils/lsp_words_lite.lua instead of snacks.words (longer debounce,
+--     one request in flight, stale replies dropped)
 --   * diagnostic pulls debounced, held during insert mode (lua/utils/lsp_diag_debounce.lua)
 --   * inlay hints for the visible lines only, one request at a time (lua/utils/lsp_inlay_range.lua)
 -- Hover, definition and completion are untouched. Flag: `vim.b.lsp_lite`.
@@ -23,13 +24,14 @@ return {
   opts = function(_, opts)
     require("utils.lsp_diag_debounce").setup()
     require("utils.lsp_inlay_range").setup { is_lite = mark }
+    require("utils.lsp_words_lite").setup { is_lite = mark }
     opts.autocmds = opts.autocmds or {}
     opts.autocmds.large_buf_lsp = {
       {
         -- AstroNvim resets the window's foldexpr to astroui's LSP-first one on FileType, which can
         -- fire again after BufWinEnter (lazy-loaded plugins re-trigger it), so apply after both
         event = { "BufWinEnter", "FileType" },
-        desc = "Treesitter folds and no document highlight on long files",
+        desc = "Treesitter folds and lite document highlight on long files",
         callback = function(args)
           if vim.bo[args.buf].buftype ~= "" or not mark(args.buf) then return end
           vim.b[args.buf].snacks_words = false
