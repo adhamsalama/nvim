@@ -121,12 +121,53 @@ function M.setup()
     vim.api.nvim_win_set_cursor(self.left_winid, { row, 4 })
   end
 
+  -- Send the visible tree (pre-order, so tree order is kept; pruned and collapsed entries are left
+  -- out) to the quickfix list, indented by depth. Incoming entries point at the call site inside
+  -- the caller; outgoing entries at the callee's definition (their fromRanges are in the parent).
+  mt.to_qflist = function(self)
+    local incoming = self.method == "callHierarchy/incomingCalls"
+    local items, min_level = {}, math.huge
+    require("lspsaga.slist").list_map(self.list, function(node)
+      local v = node.value
+      if not (v and v.winline and v.winline > 0) then return end
+      local data = incoming and v.from or v.to
+      local range = incoming and v.fromRanges and v.fromRanges[1] or data.selectionRange or data.range
+      local client = vim.lsp.get_client_by_id(v.client_id)
+      local item = vim.lsp.util.locations_to_items(
+        { { uri = data.uri, range = range } },
+        client and client.offset_encoding or "utf-16"
+      )[1]
+      if item then
+        item.level, item.name = v.inlevel, data.name
+        min_level = math.min(min_level, v.inlevel)
+        items[#items + 1] = item
+      end
+    end)
+    if #items == 0 then return vim.notify("[lspsaga] call hierarchy is empty", vim.log.levels.WARN) end
+    for _, item in ipairs(items) do
+      item.text = ("  "):rep((item.level - min_level) / 2) .. item.name
+      item.level, item.name = nil, nil
+    end
+    local title = (incoming and "Incoming calls: " or "Outgoing calls: ") .. vim.trim(items[1].text)
+    -- close first: clean() wipes the buffers peek_view loaded, which would orphan entries pointing at them
+    require("lspsaga.util").close_win { self.left_winid, self.right_winid }
+    self:clean()
+    vim.fn.setqflist({}, " ", { title = title, items = items })
+    vim.cmd "botright copen"
+  end
+
   -- lspsaga's keymap() only binds the configured keys; add deletion on top for every tree it opens
   -- (initial render and restore_last both call keymap()): `dd` drops the entry under the cursor,
-  -- and `d` over a visual selection drops every selected entry.
+  -- and `d` over a visual selection drops every selected entry. `<C-q>` sends the tree to quickfix.
   local orig_keymap = mt.keymap
   mt.keymap = function(self)
     orig_keymap(self)
+    vim.keymap.set(
+      "n",
+      "<C-q>",
+      function() self:to_qflist() end,
+      { buffer = self.left_bufnr, nowait = true, silent = true, desc = "Send call hierarchy to quickfix" }
+    )
     vim.keymap.set("n", "dd", function()
       local l = vim.api.nvim_win_get_cursor(self.left_winid)[1]
       self:delete_range(l, l)
