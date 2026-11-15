@@ -28,6 +28,11 @@ return {
         -- treesitter equivalents (used when no LSP semantic tokens are available)
         ["@variable.parameter"] = { fg = "#35A77C" },
         ["@module"] = { fg = "#E69875" },
+        -- error virtual text in everforest's red on its red-tinted bg (default links to Grey, like git blame)
+        DiagnosticVirtualTextError = { fg = "#E67E80", bg = "#514045" },
+        DiagnosticVirtualTextWarn = { fg = "#DBBC7F", bg = "#4D4C43" },
+        -- TS suggestions (e.g. 7044 "implicitly has an 'any' type") are Hint severity: everforest's purple
+        DiagnosticVirtualTextHint = { fg = "#D699B6", bg = "#4A444E" },
       },
     },
     -- Icons can be configured throughout the interface
