@@ -160,3 +160,26 @@ vim.api.nvim_create_autocmd("FileType", {
 
 -- Closing a buffer only removes it from the current tab while another tab still has it
 require("utils.tab_buffer").setup()
+
+-- Neovim's default LSP maps (`gr*`, `gO`) are described by the function they call
+-- ("vim.lsp.buf.rename()"); give them readable which-key labels, keeping their behavior.
+do
+  local descs = {
+    grn = "Rename symbol",
+    gra = "Code action",
+    grr = "References",
+    gri = "Implementation",
+    grt = "Type definition",
+    grx = "Run codelens",
+    gO = "Document symbols",
+  }
+  for lhs, desc in pairs(descs) do
+    for _, mode in ipairs { "n", "x" } do
+      local map = vim.fn.maparg(lhs, mode, false, true)
+      if map.lhs and map.buffer == 0 and (map.desc or ""):match "^vim%.lsp%." then
+        map.desc = desc
+        vim.fn.mapset(map)
+      end
+    end
+  end
+end
