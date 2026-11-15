@@ -74,6 +74,12 @@ return {
     local tsgo = require "utils.tsgo"
     local load_buf, ts_node_at, ensure_attached = tsgo.load_buf, tsgo.ts_node_at, tsgo.ensure_attached
 
+    local function key_target(name)
+      if name and name:type() == "computed_property_name" then name = name:named_child(0) end
+      if name and name:type() == "member_expression" then name = name:field("property")[1] end
+      return name
+    end
+
     -- name of the function enclosing `pos`, plus where to ask for references to it.
     -- `method_definition` / `function_declaration` carry their own `name`; arrow and function
     -- expressions are anonymous, so take the key/name/left of whatever binds them.
@@ -90,7 +96,7 @@ return {
         end
         if name then
           -- for `[KEY]: ...` reference the constant, not the brackets
-          local target = name:type() == "computed_property_name" and name:named_child(0) or name
+          local target = key_target(name)
           local row, col = target:start()
           return (vim.treesitter.get_node_text(name, bufnr):gsub("^%[(.*)%]$", "%1")), { line = row, character = col }
         end
@@ -113,6 +119,10 @@ return {
       if not parent then return end
       local access = (parent:type() == "member_expression" and parent:field("property")[1] == node)
         or (parent:type() == "subscript_expression" and parent:field("index")[1] == node)
+      local outer_sub = access and parent:parent()
+      if outer_sub and outer_sub:type() == "subscript_expression" and outer_sub:field("index")[1] == parent then
+        parent = outer_sub
+      end
       local callee = access and parent or node
       local call = callee:parent()
       local entry = { kind = FUNCTION_KIND, uri = loc.uri, range = loc.range, selectionRange = loc.range }
@@ -391,7 +401,7 @@ return {
         if parent and parent:type() == "pair" and parent:field("key")[1] == node then
           local value = parent:field("value")[1]
           if not (value and fn_types[value:type()]) then break end
-          local target = node:type() == "computed_property_name" and node:named_child(0) or node
+          local target = key_target(node)
           local row, col = target:start()
           return {
             name = (text(node, bufnr):gsub("^%[(.*)%]$", "%1")),
@@ -427,7 +437,7 @@ return {
           if name and name:type() == "member_expression" then name = name:field("property")[1] end
         end
         if name then
-          if name:type() == "computed_property_name" then name = name:named_child(0) end
+          name = key_target(name)
           -- the reference must be in the value, not be the binding's own name
           if name and var_types[name:type()] and not (start == name or vim.treesitter.is_ancestor(name, start)) then
             local row, col = name:start()
@@ -498,7 +508,7 @@ return {
           local body = fn:field("body")[1]
           local br, bc = (body or fn):start()
           if pos.line > br or (pos.line == br and pos.character >= bc) then return end
-          local target = name:type() == "computed_property_name" and name:named_child(0) or name
+          local target = key_target(name)
           local row, col = target:start()
           return { line = row, character = col }
         end
