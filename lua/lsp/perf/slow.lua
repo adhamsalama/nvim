@@ -15,7 +15,7 @@ M.max_wait_ms = 3000
 M.log_path = vim.fn.stdpath "state" .. "/lsp_slow.log"
 
 -- Background requests are logged but don't pop up warnings (same list as the statusline spinner).
-local quiet = require("utils.lsp_pending").ignored
+local quiet = require("lsp.perf.pending").ignored
 
 ---@type table<string, {start: integer, client: string, method: string, file: string, where: string?, cancelled_at: integer?, in_flight: string[], mem: string?, warned: boolean?}>
 local reqs = {}

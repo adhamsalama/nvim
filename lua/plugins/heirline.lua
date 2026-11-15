@@ -1,4 +1,4 @@
--- Adds an LSP "waiting for reply" spinner (see `lua/utils/lsp_pending.lua`) as its own statusline
+-- Adds an LSP "waiting for reply" spinner (see `lua/lsp/perf/pending.lua`) as its own statusline
 -- entry, just left of the LSP client names. The rest of the list mirrors AstroNvim's default statusline.
 
 ---@type LazySpec
@@ -6,7 +6,7 @@ return {
   "rebelot/heirline.nvim",
   opts = function(_, opts)
     local status = require "astroui.status"
-    local pending = require "utils.lsp_pending"
+    local pending = require "lsp.perf.pending"
     pending.setup()
 
     opts.statusline = {
