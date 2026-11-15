@@ -51,6 +51,11 @@ end
 return {
   "coder/claudecode.nvim",
   dependencies = { "folke/snacks.nvim" },
+  -- which-key group label. A lazy `keys` entry with a nil rhs is deleted once the plugin loads, taking the label
+  -- with it, so declare it through astrocore (a desc-only mapping becomes a which-key group).
+  specs = {
+    { "AstroNvim/astrocore", opts = { mappings = { n = { ["<Leader>a"] = { desc = "AI" } } } } },
+  },
   config = function(_, opts)
     require("claudecode").setup(opts)
 
@@ -91,7 +96,6 @@ return {
     end
   end,
   keys = {
-    { "<leader>a", nil, desc = "AI/Claude Code" },
     { "<leader>ac", "<cmd>ClaudeCode<cr>", desc = "Toggle Claude" },
     { toggle_key, "<cmd>ClaudeCode<cr>", mode = { "n", "i" }, desc = "Toggle Claude" },
     { "<leader>af", "<cmd>ClaudeCodeFocus<cr>", desc = "Focus Claude" },
