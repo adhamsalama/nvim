@@ -69,16 +69,35 @@ _G.qftextfunc_no_col = function(info)
   return ret
 end
 
--- Keep markdown code-fence backticks/language concealed in LSP hover & signature floats,
--- even after stepping into the popup (K twice). Neovim stylizes these floats with the
--- treesitter markdown parser (conceallevel=2) but hardcodes `concealcursor = ''`
--- (runtime lua/vim/lsp/util.lua), so the fence on the cursor's line is revealed once the
--- cursor enters the window. Re-enable concealcursor on the float so the fences stay hidden.
+-- Hide markdown code fences (```typescript / ```) in LSP hover & signature floats.
+-- Neovim relies on the treesitter markdown highlights query to conceal them, but render-markdown
+-- disables those conceal patterns globally (it draws code blocks itself) and is turned off for
+-- these `nofile` floats, so the fences showed raw. Conceal the fence lines with extmarks instead,
+-- shrink the float to the visible text, and set concealcursor so they stay hidden after stepping
+-- into the popup (K twice) — Neovim hardcodes `concealcursor = ''` there.
 do
+  local ns = vim.api.nvim_create_namespace "user_float_fences"
   local orig = vim.lsp.util.open_floating_preview
   vim.lsp.util.open_floating_preview = function(...)
     local bufnr, winnr = orig(...)
-    if winnr and vim.api.nvim_win_is_valid(winnr) then vim.wo[winnr].concealcursor = "nvic" end
+    if not (winnr and vim.api.nvim_win_is_valid(winnr)) then return bufnr, winnr end
+    vim.wo[winnr].concealcursor = "nvic"
+    if vim.bo[bufnr].filetype == "markdown" then
+      vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+      local found = false
+      for i, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+        if line:match "^%s*```" then
+          vim.api.nvim_buf_set_extmark(bufnr, ns, i - 1, 0, { conceal_lines = "" })
+          found = true
+        end
+      end
+      if found and vim.api.nvim_win_get_config(winnr).relative ~= "" then
+        local height = vim.api.nvim_win_text_height(winnr, {}).all
+        if height > 0 and height < vim.api.nvim_win_get_height(winnr) then
+          vim.api.nvim_win_set_height(winnr, height)
+        end
+      end
+    end
     return bufnr, winnr
   end
 end
