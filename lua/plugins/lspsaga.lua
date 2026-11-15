@@ -410,6 +410,35 @@ return {
     -- Incoming "calls" of a `__var` root: its references, grouped by the named function each sits in
     -- (anonymous callbacks are walked through to the named one). Each function entry expands to its
     -- own callers via `request_references`; top-level uses become leaves named `path:line`.
+    -- Outside any function, the value a reference is part of: `const X = [ref]`, `X: ref`,
+    -- `module.exports.X = ref`. Returns the binding's name and its position, so the entry can expand
+    -- as a variable in turn.
+    local function enclosing_binding(uri, pos)
+      local bufnr, node = ts_node_at(uri, pos)
+      local start = node
+      while node do
+        local t, name = node:type()
+        if t == "variable_declarator" then
+          name = node:field("name")[1]
+        elseif t == "pair" then
+          name = node:field("key")[1]
+        elseif t == "assignment_expression" then
+          name = node:field("left")[1]
+          if name and name:type() == "member_expression" then name = name:field("property")[1] end
+        end
+        if name then
+          if name:type() == "computed_property_name" then name = name:named_child(0) end
+          -- the reference must be in the value, not be the binding's own name
+          if name and var_types[name:type()] and not (start == name or vim.treesitter.is_ancestor(name, start)) then
+            local row, col = name:start()
+            return text(name, bufnr), { line = row, character = col }
+          end
+          return
+        end
+        node = node:parent()
+      end
+    end
+
     local function request_var_references(client, item, handler)
       local params = {
         textDocument = { uri = item.uri },
@@ -420,6 +449,11 @@ return {
         local calls, by_fn = {}, {}
         for _, loc in ipairs(locs or {}) do
           local ok, name, ref_pos = pcall(enclosing_name, loc.uri, loc.range.start)
+          local is_var = false
+          if not (ok and name and ref_pos) then
+            ok, name, ref_pos = pcall(enclosing_binding, loc.uri, loc.range.start)
+            is_var = true
+          end
           local key = ok and name and ref_pos and ("%s:%d:%d"):format(loc.uri, ref_pos.line, ref_pos.character)
           if key and by_fn[key] then
             table.insert(by_fn[key].fromRanges, loc.range)
@@ -427,6 +461,9 @@ return {
             local entry = { kind = FUNCTION_KIND, uri = loc.uri, range = loc.range, selectionRange = loc.range }
             if key then
               entry.name, entry.__ref_pos = name, ref_pos
+              if is_var then
+                entry.kind, entry.__var = 13, true -- Variable: expands to where *it* is used
+              end
             else
               entry.name, entry.__ref_leaf = ("%s:%d"):format(rel_path(loc.uri), loc.range.start.line + 1), true
             end
