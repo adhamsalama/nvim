@@ -17,6 +17,9 @@ selene lua/
 
 # Check plugin lockfile
 cat lazy-lock.json | jq '.["plugin-name"]'
+
+# Snapshot custom LSP behavior against a JS/TS project (diff against a baseline when given)
+LSP_TEST_CASES=<cases.lua> tests/lsp/run.sh <js-project> <out-dir> [<baseline-dir>]
 ```
 
 ## Architecture
@@ -39,6 +42,21 @@ cat lazy-lock.json | jq '.["plugin-name"]'
 | `lua/plugins/astrolsp.lua` | LSP config (servers, format-on-save, codelens, keymaps) |
 | `lua/plugins/astroui.lua` | Colorscheme and icon config |
 | `lua/plugins/mason.lua` | Managed LSP/tool installs |
+| `lua/plugins/lsp.lua` | Wiring (autocmds, commands, keymaps) for every custom LSP feature in `lua/lsp/` |
+| `lua/plugins/lspsaga.lua` | Lspsaga, used only for its call hierarchy tree |
+
+### Custom LSP code (`lua/lsp/`)
+
+Logic lives in modules; `lua/plugins/lsp.lua` (and `lspsaga.lua` for the call hierarchy) only wires it up.
+
+- `callhierarchy/` — overrides lspsaga's request function so the tree works where tsgo has no call hierarchy (functions under computed keys or in object properties, variables); `ui.lua` adds reopen-last, `dd` pruning and the preview winbar
+- `tsgo/` — shared buffer/treesitter helpers (`init.lua`), `grr`/`grR` that follow export objects (`references.lua`), Node built-in source (`builtin_source.lua`)
+- `perf/` — lighter LSP on long files (`large_buf.lua` + `diag_debounce`/`inlay_range`/`words_lite`), slow-request log, statusline pending spinner
+- `branch_reload.lua`, `ref_count.lua`, `functions_picker.lua`
+
+`lua/utils/` holds only non-LSP helpers.
+
+**Tests**: `LSP_TEST_CASES=<cases.lua> tests/lsp/run.sh <js-project> <out-dir> [<baseline-dir>]` runs the full config headless against a real JS/TS project and snapshots the LSP wiring, call hierarchy / `grr` / ref-count results and the call hierarchy UI; with a baseline dir it diffs and fails on any change. Take a baseline before a refactor, compare after. `NVIM_CONFIG_DIR=<git worktree>` runs another commit's config without touching the checkout (and without switching branches under a running editor). Runs use their own state dir and never autosave sessions. The cases file names the project's files and symbols to test with (shape: `tests/lsp/cases.example.lua`); keep it outside this repo, as it describes a private project.
 
 ### Plugin File Conventions
 
