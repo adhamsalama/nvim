@@ -24,7 +24,7 @@ local function ms_since(t) return math.floor((vim.uv.hrtime() - t) / 1e6) end
 local function short(method) return (method:gsub("^textDocument/", "")) end
 
 -- Pending requests listed individually; cancelled ones the server hasn't answered yet (tsgo keeps
--- working on them) are summarised per method, e.g. "98 cancelled diagnostic".
+-- working on them until its next cancellation check) are summarised per method, e.g. "98 cancelled diagnostic".
 local function in_flight(client, self_id)
   local list, cancelled = {}, {}
   for id, req in pairs(client.requests) do

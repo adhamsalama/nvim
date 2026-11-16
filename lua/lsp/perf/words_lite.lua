@@ -1,6 +1,6 @@
 -- documentHighlight for long buffers, replacing snacks.words there (it's disabled per buffer with
 -- vim.b.snacks_words = false). snacks.words sends a request every time the cursor rests 200ms; on a
--- 19k-line file tsgo takes seconds per reply and ignores $/cancelRequest, so they pile up in front
+-- 19k-line file tsgo takes seconds per reply and honors $/cancelRequest late, so they pile up in front
 -- of hover. Here, for buffers `is_lite` says yes to:
 --   * normal mode only, after the cursor rests `delay_ms`
 --   * no request while the cursor stays inside the current highlights or isn't on a keyword char

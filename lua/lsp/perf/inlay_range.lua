@@ -1,15 +1,16 @@
 -- Inlay hints for the visible part of the buffer only (VS Code style). Nvim 0.12 asks for hints
 -- over the WHOLE buffer after every change and never cancels the old request; tsgo type-checks the
--- whole file each time (tsgo ignores $/cancelRequest). On long files hover queues behind dozens of
--- those; on any file, typing piles them up: ~40s of typing in a 1600-line file with 30 buffers open
--- left 300+ requests in flight and took tsgo from 3.6 to 8.5 GB (~4 GB with this module).
+-- whole file each time, and only stops at its next cancellation check (seconds late on big files).
+-- On long files hover queues behind dozens of those; on any file, typing piles them up: ~40s of
+-- typing in a 1600-line file with 30 buffers open left 300+ requests in flight and took tsgo from
+-- 3.6 to 8.5 GB (~4 GB with this module). Upstream: neovim/neovim#42848 (visible-range requests).
 --
 -- For every buffer:
 --   * Nvim's own whole-buffer `textDocument/inlayHint` requests are swallowed (Client.request is
 --     wrapped) and turned into a trigger for this module
 --   * we request the visible lines of every window showing the buffer plus one screen above/below,
 --     after scroll/resize/edit, with a delay that adapts to how slowly the server answered recently
---   * at most one request per buffer and client is in flight (tsgo ignores $/cancelRequest); changes
+--   * at most one request per buffer and client is in flight (cancels take effect late); changes
 --     meanwhile mark it dirty and one fresh request follows the reply
 --   * hints are inline extmarks, so old ones move with edits and stay until the new reply lands
 -- On/off still follows vim.lsp.inlay_hint.is_enabled(), so <Leader>uh / <Leader>uH keep working.

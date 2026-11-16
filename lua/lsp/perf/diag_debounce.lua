@@ -1,6 +1,6 @@
 -- Debounce LSP pull diagnostics. Nvim 0.12 sends `textDocument/diagnostic` after every didChange
--- and cancels the previous one, but tsgo keeps computing cancelled pulls (on a 19k-line file each
--- takes seconds), so hover/completion queue behind dozens of dead requests.
+-- and cancels the previous one, but tsgo only stops a cancelled pull at its next cancellation check
+-- (seconds late on a 19k-line file), so hover/completion queue behind dozens of dead requests.
 --
 -- Wraps the private `vim.lsp.diagnostic._refresh` (re-check on Nvim upgrades):
 --   * all buffers: coalesce pulls within `delay_ms`
