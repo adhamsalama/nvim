@@ -2,6 +2,7 @@
 -- here, the logic in the modules. (Server config: astrolsp.lua; call hierarchy: lspsaga.lua.)
 --
 --   lsp/perf/large_buf      lighter LSP on long files (`vim.b.lsp_lite`)
+--   lsp/perf/inlay_range    inlay hints for the visible lines only, one request at a time
 --   lsp/perf/slow           warn about / log requests slower than 5s (:LspSlow)
 --   lsp/perf/pending        statusline spinner (wired in heirline.lua)
 --   lsp/branch_reload       restart clients when the project's git branch changes
@@ -27,6 +28,7 @@ return {
     local large_buf = require "lsp.perf.large_buf"
     large_buf.setup()
     require("lsp.perf.slow").setup()
+    require("lsp.perf.inlay_range").setup()
 
     opts.autocmds = opts.autocmds or {}
     opts.autocmds.large_buf_lsp = large_buf.autocmds

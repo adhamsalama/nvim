@@ -7,8 +7,8 @@
 --   * documentHighlight via words_lite.lua instead of snacks.words (longer debounce,
 --     one request in flight, stale replies dropped)
 --   * diagnostic pulls debounced, held during insert mode (diag_debounce.lua)
---   * inlay hints for the visible lines only, one request at a time (inlay_range.lua)
 -- Hover, definition and completion are untouched. Flag: `vim.b.lsp_lite`.
+-- (Inlay hints are limited to the visible lines on every buffer, see inlay_range.lua.)
 -- Wired up in lua/plugins/lsp.lua.
 
 local M = {}
@@ -22,7 +22,6 @@ end
 
 function M.setup()
   require("lsp.perf.diag_debounce").setup()
-  require("lsp.perf.inlay_range").setup { is_lite = M.is_lite }
   require("lsp.perf.words_lite").setup { is_lite = M.is_lite }
 end
 

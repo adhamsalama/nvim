@@ -1,8 +1,10 @@
--- Inlay hints for the visible part of long buffers only (VS Code style). Nvim 0.12 asks for hints
--- over the WHOLE buffer after every change and never cancels the old request; tsgo type-checks all
--- 19k lines each time and hover queues behind dozens of those.
+-- Inlay hints for the visible part of the buffer only (VS Code style). Nvim 0.12 asks for hints
+-- over the WHOLE buffer after every change and never cancels the old request; tsgo type-checks the
+-- whole file each time (tsgo ignores $/cancelRequest). On long files hover queues behind dozens of
+-- those; on any file, typing piles them up: ~40s of typing in a 1600-line file with 30 buffers open
+-- left 300+ requests in flight and took tsgo from 3.6 to 8.5 GB (~4 GB with this module).
 --
--- For buffers `is_lite` says yes to:
+-- For every buffer:
 --   * Nvim's own whole-buffer `textDocument/inlayHint` requests are swallowed (Client.request is
 --     wrapped) and turned into a trigger for this module
 --   * we request the visible lines of every window showing the buffer plus one screen above/below,
@@ -21,9 +23,6 @@ M.max_delay_ms = 750
 
 local method = "textDocument/inlayHint"
 local ns = vim.api.nvim_create_namespace "lsp_inlay_range"
-
----@type fun(bufnr: integer): boolean
-local is_lite = function(_) return false end
 
 ---@class lsp_inlay_range.State
 ---@field timer uv.uv_timer_t
@@ -132,10 +131,10 @@ local function fire(bufnr)
   end
 end
 
---- Debounced request for `bufnr` (no-op unless it's a long buffer with hints on).
+--- Debounced request for `bufnr`.
 ---@param bufnr integer
 function schedule(bufnr)
-  if not vim.api.nvim_buf_is_valid(bufnr) or not is_lite(bufnr) then return end
+  if not vim.api.nvim_buf_is_valid(bufnr) then return end
   local s = states[bufnr]
   if not s then
     local timer = vim.uv.new_timer()
@@ -149,18 +148,16 @@ function schedule(bufnr)
 end
 M.schedule = schedule
 
----@param opts {is_lite: fun(bufnr: integer): boolean}
-function M.setup(opts)
+function M.setup()
   if M._setup then return end
   M._setup = true
-  is_lite = opts.is_lite
 
-  -- swallow Nvim's whole-buffer requests (it passes no handler) on long buffers
+  -- swallow Nvim's whole-buffer requests (it passes no handler)
   local Client = require "vim.lsp.client"
   local orig_request = Client.request
   ---@diagnostic disable-next-line: duplicate-set-field
   function Client:request(m, params, handler, bufnr)
-    if m == method and handler == nil and bufnr and bufnr ~= 0 and is_lite(bufnr) then
+    if m == method and handler == nil and bufnr and bufnr ~= 0 then
       vim.schedule(function() schedule(bufnr) end)
       return true, nil
     end
@@ -175,7 +172,7 @@ function M.setup(opts)
     local bufnr = filter and filter.bufnr
     local bufs = bufnr and { vim._resolve_bufnr(bufnr) } or vim.tbl_keys(states)
     for _, b in ipairs(bufs) do
-      if vim.api.nvim_buf_is_valid(b) and is_lite(b) then
+      if vim.api.nvim_buf_is_valid(b) then
         if enabled(b) then
           schedule(b)
         else
@@ -188,7 +185,7 @@ function M.setup(opts)
   local group = vim.api.nvim_create_augroup("lsp_inlay_range", { clear = true })
   vim.api.nvim_create_autocmd("WinScrolled", {
     group = group,
-    desc = "Request inlay hints for the newly visible lines of long buffers",
+    desc = "Request inlay hints for the newly visible lines",
     callback = function()
       local seen = {}
       for id in pairs(vim.v.event) do
@@ -205,7 +202,7 @@ function M.setup(opts)
   })
   vim.api.nvim_create_autocmd("BufWinEnter", {
     group = group,
-    desc = "Request inlay hints when a long buffer is shown",
+    desc = "Request inlay hints when a buffer is shown",
     callback = function(args) schedule(args.buf) end,
   })
   vim.api.nvim_create_autocmd({ "BufWipeout", "BufUnload" }, {
