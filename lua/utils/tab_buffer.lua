@@ -48,7 +48,59 @@ local function detach(bufnr)
   vim.cmd.redrawtabline()
 end
 
+-- Delete listed buffers that no tab holds any more and no window shows. Closing a tab leaves its
+-- buffers listed but in no tab's `vim.t.bufs`: hidden from every tabline, yet still in the buffer
+-- picker. Modified buffers and running terminals can't be deleted; they move to the current tab
+-- instead, so they stay reachable from the tabline.
+function M.prune_orphans()
+  local held = {}
+  for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
+    for _, bufnr in ipairs(vim.t[tabpage].bufs or {}) do
+      held[bufnr] = true
+    end
+  end
+  local adopted = {}
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[bufnr].buflisted and not held[bufnr] and vim.tbl_isempty(vim.fn.win_findbuf(bufnr)) then
+      -- non-forced delete refuses modified buffers and running terminals
+      if vim.bo[bufnr].modified or not pcall(vim.api.nvim_buf_delete, bufnr, {}) then
+        if vim.api.nvim_buf_is_valid(bufnr) then table.insert(adopted, bufnr) end
+      end
+    end
+  end
+  if #adopted > 0 then
+    vim.t.bufs = vim.list_extend(vim.t.bufs or {}, adopted)
+    require("astrocore").event "BufsUpdated"
+    vim.cmd.redrawtabline()
+    vim.notify(("Moved %d unsaved buffer(s) from a closed tab into this tab"):format(#adopted), vim.log.levels.WARN)
+  end
+end
+
 function M.setup()
+  -- every tab close (:q / <C-w>c on its last window, :tabclose, :tabonly, plugins closing their
+  -- tab) drops that tab's buffers. Deferred so a burst of closes (:tabonly) prunes once, and so it
+  -- never runs mid-session-load, before the astrocore extension has restored each tab's `bufs`.
+  local loading, pending = false, false
+  local resession = require "resession"
+  resession.add_hook("pre_load", function() loading = true end)
+  resession.add_hook("post_load", function()
+    loading = false
+    -- sessions saved before this fix can carry orphans; drop them on load too
+    vim.schedule(M.prune_orphans)
+  end)
+  vim.api.nvim_create_autocmd("TabClosed", {
+    group = vim.api.nvim_create_augroup("tab_buffer_prune", { clear = true }),
+    desc = "Delete the closed tab's buffers that no other tab holds",
+    callback = function()
+      if loading or pending then return end
+      pending = true
+      vim.schedule(function()
+        pending = false
+        if not loading then M.prune_orphans() end
+      end)
+    end,
+  })
+
   local buffer = require "astrocore.buffer"
   local close = buffer.close
   buffer.close = function(bufnr, force)
