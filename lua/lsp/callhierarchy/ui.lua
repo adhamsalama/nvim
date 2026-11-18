@@ -15,12 +15,30 @@ function M.setup()
   local saga_config = require("lspsaga").config
   local last
 
+  -- peek_view marks every buffer that wasn't *loaded* when previewed as `wipe`, and clean() wipes it,
+  -- even when the buffer already existed unloaded and something holds its number: quickfix entries
+  -- (e.g. from `<C-q>` below), the jumplist, marks. Wiping it leaves those pointing at nothing (qf
+  -- lines lose their filename and :cnext stops there). Unload instead: memory and the LSP attachment
+  -- are released the same, but the buffer number and name survive.
   local orig_clean = mt.clean
   mt.clean = function(self)
+    local unload = {}
     if self.list and self.list.value then
       last = { list = self.list, method = self.method, layout = self.layout, main_buf = self.main_buf }
+      require("lspsaga.slist").list_map(self.list, function(node)
+        local v = node.value
+        if v and v.wipe then
+          v.wipe = nil
+          unload[v.bufnr] = true
+        end
+      end)
     end
-    return orig_clean(self)
+    orig_clean(self) -- closes the tree + preview windows first
+    for bufnr in pairs(unload) do
+      if vim.api.nvim_buf_is_loaded(bufnr) and not vim.bo[bufnr].modified and #vim.fn.win_findbuf(bufnr) == 0 then
+        pcall(vim.api.nvim_buf_delete, bufnr, { unload = true })
+      end
+    end
   end
 
   -- Show our heirline winbar (path + file + symbol breadcrumbs) on the preview window.
@@ -149,7 +167,6 @@ function M.setup()
       item.level, item.name = nil, nil
     end
     local title = (incoming and "Incoming calls: " or "Outgoing calls: ") .. vim.trim(items[1].text)
-    -- close first: clean() wipes the buffers peek_view loaded, which would orphan entries pointing at them
     require("lspsaga.util").close_win { self.left_winid, self.right_winid }
     self:clean()
     vim.fn.setqflist({}, " ", { title = title, items = items })
