@@ -49,7 +49,7 @@ LSP_TEST_CASES=<cases.lua> tests/lsp/run.sh <js-project> <out-dir> [<baseline-di
 
 Logic lives in modules; `lua/plugins/lsp.lua` (and `lspsaga.lua` for the call hierarchy) only wires it up.
 
-- `callhierarchy/` — overrides lspsaga's request function so the tree works where tsgo has no call hierarchy (functions under computed keys or in object properties, variables); `ui.lua` adds reopen-last, `dd` pruning and the preview winbar
+- `callhierarchy/` — overrides lspsaga's request function so the tree works where tsgo has no call hierarchy (functions under computed keys or in object properties, variables); `ui.lua` adds reopen-last, `dd` pruning, duplicate-entry marks (`×N` / dimmed `↑ L<n>`, `%` cycles) and the preview winbar
 - `tsgo/` — shared buffer/treesitter helpers (`init.lua`), `grr`/`grR` that follow export objects (`references.lua`), Node built-in source (`builtin_source.lua`)
 - `perf/` — lighter LSP on long files (`large_buf.lua` + `diag_debounce`/`inlay_range`/`words_lite`), slow-request log, statusline pending spinner
 - `branch_reload.lua`, `ref_count.lua`, `functions_picker.lua`

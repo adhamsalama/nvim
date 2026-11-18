@@ -1,6 +1,6 @@
 -- UI snapshot: drive the real lspsaga call hierarchy window headless and record the tree text after
--- each step (open, expand, `dd`, quit, restore_last), plus the preview window's winbar. Covers the
--- additions in lua/lsp/callhierarchy/ui.lua. Run via tests/lsp/run.sh.
+-- each step (open, expand, `dd`, quit, restore_last) with its duplicate-entry marks, plus the preview
+-- window's winbar. Covers the additions in lua/lsp/callhierarchy/ui.lua. Run via tests/lsp/run.sh.
 
 local H = dofile(debug.getinfo(1, "S").source:sub(2):match "^(.*/)" .. "helpers.lua")
 
@@ -12,13 +12,22 @@ local function tree_win()
   end
 end
 
+-- tree text, each line followed by its duplicate-entry marks (eol virt_text, `[dim]` when dimmed)
 local function tree_lines()
   local w = tree_win()
   if not w then return nil end
-  return vim.tbl_map(
-    function(l) return (l:gsub("%s+$", "")) end,
-    vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)
-  )
+  local buf = vim.api.nvim_win_get_buf(w)
+  local ns = vim.api.nvim_get_namespaces().SagaCallhierarchyDup
+  local lines = {}
+  for i, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+    l = l:gsub("%s+$", "")
+    local marks = ns and vim.api.nvim_buf_get_extmarks(buf, ns, { i - 1, 0 }, { i - 1, -1 }, { details = true })
+    for _, m in ipairs(marks or {}) do
+      l = l .. (m[4].virt_text and m[4].virt_text[1][1] or "") .. (m[4].hl_group and " [dim]" or "")
+    end
+    lines[i] = l
+  end
+  return lines
 end
 
 local function snap(title)

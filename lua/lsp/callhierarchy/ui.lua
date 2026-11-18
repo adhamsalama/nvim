@@ -156,12 +156,130 @@ function M.setup()
     vim.cmd "botright copen"
   end
 
+  -- Duplicate entries: the same function (same uri + selectionRange start) shown on more than one
+  -- visible line. The first occurrence gets a `×N` count, every later one is dimmed with `↑ L<n>`
+  -- pointing at the first; with the cursor on any occurrence, all of them are highlighted, and `%`
+  -- cycles through them. Marks live in their own namespace, so lspsaga's extmark edits leave them be.
+  local function set_dup_hls()
+    vim.api.nvim_set_hl(0, "SagaCallhierarchyDup", { link = "Comment", default = true })
+    vim.api.nvim_set_hl(0, "SagaCallhierarchyDupRef", { link = "Comment", default = true })
+    vim.api.nvim_set_hl(0, "SagaCallhierarchyDupCount", { link = "DiagnosticInfo", default = true })
+    vim.api.nvim_set_hl(0, "SagaCallhierarchyDupCursor", { link = "LspReferenceText", default = true })
+  end
+  set_dup_hls()
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = vim.api.nvim_create_augroup("SagaCallhierarchyDupHl", { clear = true }),
+    callback = set_dup_hls,
+  })
+
+  -- Identity of the function an entry stands for. Incoming entries have `selectionRange` rewritten
+  -- to the call site (see lsp/callhierarchy/init.lua), so prefer the declaration: `__ref_pos` (name of
+  -- the enclosing function, on reference-driven entries), then `__decl_range` (the original selectionRange).
+  local function item_key(item)
+    local pos = item.__ref_pos or ((item.__decl_range or item.selectionRange or item.range or {}).start or {})
+    return ("%s:%d:%d"):format(item.uri, pos.line or -1, pos.character or -1)
+  end
+
+  -- Recompute the marks from the visible nodes; `self.dup_rows[winline]` holds the sorted winlines
+  -- of that line's duplicate group (only set for lines that have duplicates).
+  mt.mark_duplicates = function(self)
+    local buf = self.left_bufnr
+    if not (buf and vim.api.nvim_buf_is_valid(buf) and self.list and self.list.value) then return end
+    local incoming = self.method == "callHierarchy/incomingCalls"
+    local groups = {}
+    require("lspsaga.slist").list_map(self.list, function(node)
+      local v = node.value
+      if v and v.winline and v.winline > 0 then
+        local k = item_key(incoming and v.from or v.to)
+        groups[k] = groups[k] or {}
+        table.insert(groups[k], v)
+      end
+    end)
+    local ns = vim.api.nvim_create_namespace "SagaCallhierarchyDup"
+    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    self.dup_rows = {}
+    for _, g in pairs(groups) do
+      if #g > 1 then
+        table.sort(g, function(a, b) return a.winline < b.winline end)
+        local rows = vim.tbl_map(function(v) return v.winline end, g)
+        for i, v in ipairs(g) do
+          local line = lines[v.winline]
+          if line then
+            self.dup_rows[v.winline] = rows
+            local mark = i == 1 and { virt_text = { { " ×" .. #g, "SagaCallhierarchyDupCount" } } }
+              or {
+                virt_text = { { " ↑ L" .. rows[1], "SagaCallhierarchyDupRef" } },
+                end_col = #line,
+                hl_group = "SagaCallhierarchyDup",
+              }
+            mark.virt_text_pos = "eol"
+            pcall(
+              vim.api.nvim_buf_set_extmark,
+              buf,
+              ns,
+              v.winline - 1,
+              i == 1 and 0 or math.min(v.inlevel, #line),
+              mark
+            )
+          end
+        end
+      end
+    end
+    self:mark_cursor_duplicates()
+  end
+
+  mt.mark_cursor_duplicates = function(self)
+    local buf, win = self.left_bufnr, self.left_winid
+    if not (buf and vim.api.nvim_buf_is_valid(buf) and win and vim.api.nvim_win_is_valid(win)) then return end
+    local ns = vim.api.nvim_create_namespace "SagaCallhierarchyDupCursor"
+    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    local rows = self.dup_rows and self.dup_rows[vim.api.nvim_win_get_cursor(win)[1]]
+    for _, r in ipairs(rows or {}) do
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns, r - 1, 0, { line_hl_group = "SagaCallhierarchyDupCursor" })
+    end
+  end
+
+  -- lspsaga edits the tree buffer in place on expand/collapse/request (not via redraw_tree), so
+  -- refresh on every buffer change, once per batch of edits, after lspsaga has updated winlines.
+  mt.track_duplicates = function(self)
+    local buf, pending = self.left_bufnr, false
+    vim.api.nvim_buf_attach(buf, false, {
+      on_lines = function()
+        if self.left_bufnr ~= buf then return true end -- tree closed: detach
+        if pending then return end
+        pending = true
+        vim.schedule(function()
+          pending = false
+          if self.left_bufnr == buf then self:mark_duplicates() end
+        end)
+      end,
+    })
+    vim.api.nvim_create_autocmd("CursorMoved", {
+      group = vim.api.nvim_create_augroup("SagaCallhierarchyDup", { clear = true }),
+      buffer = buf,
+      callback = function() self:mark_cursor_duplicates() end,
+    })
+    vim.keymap.set("n", "%", function()
+      local cur = vim.api.nvim_win_get_cursor(self.left_winid)[1]
+      local rows = self.dup_rows and self.dup_rows[cur]
+      if not rows then return end
+      local i = 1
+      while rows[i] ~= cur do
+        i = i + 1
+      end
+      vim.api.nvim_win_set_cursor(self.left_winid, { rows[i % #rows + 1], 4 })
+    end, { buffer = buf, nowait = true, silent = true, desc = "Next occurrence of this call hierarchy entry" })
+  end
+
   -- lspsaga's keymap() only binds the configured keys; add deletion on top for every tree it opens
   -- (initial render and restore_last both call keymap()): `dd` drops the entry under the cursor,
   -- and `d` over a visual selection drops every selected entry. `<C-q>` sends the tree to quickfix.
+  -- keymap() runs once per new tree buffer, before its lines are set, so duplicate tracking hooks in here.
   local orig_keymap = mt.keymap
   mt.keymap = function(self)
     orig_keymap(self)
+    self:track_duplicates()
     vim.keymap.set(
       "n",
       "<C-q>",
