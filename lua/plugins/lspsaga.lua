@@ -67,7 +67,7 @@ return {
     -- Call-site previews, reference-driven levels for what tsgo can't follow, variables as roots:
     -- see lua/lsp/callhierarchy/init.lua
     require("lsp.callhierarchy").setup()
-    -- Reopen the last tree (<Leader>lv), `dd`/visual `d` to prune entries, duplicate-entry marks, heirline winbar on the preview
+    -- Tree history (`<`/`>` in the tree, <Leader>lv reopens), `dd`/visual `d` to prune entries, duplicate-entry marks, heirline winbar on the preview
     require("lsp.callhierarchy.ui").setup()
   end,
 }

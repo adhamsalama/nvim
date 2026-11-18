@@ -3,17 +3,38 @@
 local M = {}
 
 function M.setup()
-  -- Reopen the last call hierarchy tree, expansions included.
+  -- Call hierarchy history: reopen the last tree, or step through earlier ones, expansions included.
   --
   -- Every way out of the tree (quit, close, and the edit/split/tabe jumps) goes through
   -- `ch:clean()`, which nils every field on the instance. The tree itself is the `self.list`
   -- linked list: each node keeps its `inlevel`, `expand` state and `winline` (-1 when hidden
   -- under a collapsed parent), so holding on to it is enough to redraw the same view. The
   -- hook goes on the metatable because `clean()` would wipe anything set on the instance.
+  --
+  -- Every tree shown is kept in a history (like the quickfix stack, newest last, capped at
+  -- HISTORY_MAX); `<`/`>` in the tree step to the older/newer one and `<Leader>lv` reopens the one
+  -- viewed last. An entry is the same `self.list` table the tree mutates, so expansions and `dd`
+  -- pruning carry over, plus the cursor row.
   local ch = require "lspsaga.callhierarchy"
   local mt = getmetatable(ch)
   local saga_config = require("lspsaga").config
-  local last
+  local HISTORY_MAX = 10
+  local history, history_pos = {}, 0 -- history_pos: index of the tree shown / viewed last
+
+  -- The history entry for `self.list`, added as the newest one if it isn't there yet. Makes it current.
+  local function track(self)
+    for i, e in ipairs(history) do
+      if e.list == self.list then
+        e.method, e.layout, e.main_buf = self.method, self.layout, self.main_buf
+        history_pos = i
+        return e
+      end
+    end
+    table.insert(history, { list = self.list, method = self.method, layout = self.layout, main_buf = self.main_buf })
+    if #history > HISTORY_MAX then table.remove(history, 1) end
+    history_pos = #history
+    return history[history_pos]
+  end
 
   -- peek_view marks every buffer that wasn't *loaded* when previewed as `wipe`, and clean() wipes it,
   -- even when the buffer already existed unloaded and something holds its number: quickfix entries
@@ -24,7 +45,7 @@ function M.setup()
   mt.clean = function(self)
     local unload = {}
     if self.list and self.list.value then
-      last = { list = self.list, method = self.method, layout = self.layout, main_buf = self.main_buf }
+      track(self)
       require("lspsaga.slist").list_map(self.list, function(node)
         local v = node.value
         if v and v.wipe then
@@ -291,12 +312,31 @@ function M.setup()
 
   -- lspsaga's keymap() only binds the configured keys; add deletion on top for every tree it opens
   -- (initial render and restore_last both call keymap()): `dd` drops the entry under the cursor,
-  -- and `d` over a visual selection drops every selected entry. `<C-q>` sends the tree to quickfix.
+  -- and `d` over a visual selection drops every selected entry. `<C-q>` sends the tree to quickfix,
+  -- `<`/`>` step through the history.
   -- keymap() runs once per new tree buffer, before its lines are set, so duplicate tracking hooks in here.
   local orig_keymap = mt.keymap
   mt.keymap = function(self)
     orig_keymap(self)
     self:track_duplicates()
+    local entry = track(self)
+    vim.api.nvim_create_autocmd("CursorMoved", {
+      group = vim.api.nvim_create_augroup("SagaCallhierarchyHistory", { clear = true }),
+      buffer = self.left_bufnr,
+      callback = function() entry.cursor = vim.api.nvim_win_get_cursor(0)[1] end,
+    })
+    vim.keymap.set(
+      "n",
+      "<",
+      function() self:history_step(-1) end,
+      { buffer = self.left_bufnr, nowait = true, silent = true, desc = "Older call hierarchy" }
+    )
+    vim.keymap.set(
+      "n",
+      ">",
+      function() self:history_step(1) end,
+      { buffer = self.left_bufnr, nowait = true, silent = true, desc = "Newer call hierarchy" }
+    )
     vim.keymap.set(
       "n",
       "<C-q>",
@@ -320,14 +360,16 @@ function M.setup()
     )
   end
 
-  mt.restore_last = function(self)
+  -- Reopen history entry `idx` (default: the one viewed last), or focus the tree if it's open.
+  mt.restore_last = function(self, idx)
     if self.left_winid and vim.api.nvim_win_is_valid(self.left_winid) then
       return vim.api.nvim_set_current_win(self.left_winid)
     end
-    if not last then return vim.notify("[lspsaga] no call hierarchy to reopen", vim.log.levels.WARN) end
-    if not vim.api.nvim_buf_is_valid(last.main_buf) then last.main_buf = vim.api.nvim_get_current_buf() end
+    local entry = history[idx or history_pos]
+    if not entry then return vim.notify("[lspsaga] no call hierarchy to reopen", vim.log.levels.WARN) end
+    if not vim.api.nvim_buf_is_valid(entry.main_buf) then entry.main_buf = vim.api.nvim_get_current_buf() end
 
-    self.list, self.method, self.layout, self.main_buf = last.list, last.method, last.layout, last.main_buf
+    self.list, self.method, self.layout, self.main_buf = entry.list, entry.method, entry.layout, entry.main_buf
     local height = bit.rshift(vim.o.lines, 1) - 4
     local width = math.floor(vim.api.nvim_win_get_width(0) * saga_config.callhierarchy.left_width)
     self.left_bufnr, self.left_winid, self.right_bufnr, self.right_winid = require("lspsaga.layout")
@@ -340,12 +382,42 @@ function M.setup()
     self:peek_view()
     self:keymap()
 
-    -- preview buffers were wiped/cleared by clean(); let peek_view reload them
+    -- preview buffers were unloaded/cleared by clean(); let peek_view reload them
     require("lspsaga.slist").list_map(self.list, function(node)
       node.value.bufnr, node.value.wipe, node.value.rendered = nil, nil, nil
     end)
     self:redraw_tree()
-    vim.api.nvim_win_set_cursor(self.left_winid, { 1, 4 })
+    local row = math.min(entry.cursor or 1, vim.api.nvim_buf_line_count(self.left_bufnr))
+    vim.api.nvim_win_set_cursor(self.left_winid, { row, 4 })
+  end
+
+  -- `<` / `>`: replace the open tree with the older / newer one in the history.
+  mt.history_step = function(self, delta)
+    if self.pending_request then
+      return vim.notify("[lspsaga] wait for the pending call hierarchy request", vim.log.levels.WARN)
+    end
+    local target = history_pos + delta
+    if not history[target] then
+      return vim.notify(
+        ("[lspsaga] at %s call hierarchy (%d of %d)"):format(delta < 0 and "oldest" or "newest", history_pos, #history),
+        vim.log.levels.WARN
+      )
+    end
+    if self.left_winid and vim.api.nvim_win_is_valid(self.left_winid) then
+      history[history_pos].cursor = vim.api.nvim_win_get_cursor(self.left_winid)[1]
+    end
+    require("lspsaga.util").close_win { self.left_winid, self.right_winid }
+    self:clean()
+    self:restore_last(target)
+    local e = history[target]
+    local root = e.list.value and (e.method == "callHierarchy/incomingCalls" and e.list.value.from or e.list.value.to)
+    vim.api.nvim_echo({
+      { ("call hierarchy %d of %d: "):format(target, #history) },
+      {
+        (e.method == "callHierarchy/incomingCalls" and "incoming " or "outgoing ") .. (root and root.name or "?"),
+        "Title",
+      },
+    }, false, {})
   end
 end
 

@@ -116,7 +116,7 @@ local function patches()
     ["lspsaga.util.client_request"] = require("lspsaga.util").client_request,
     ["lspsaga.layout.left"] = require("lspsaga.layout").left,
   }
-  for _, k in ipairs { "clean", "peek_view", "redraw_tree", "delete_range", "keymap", "restore_last" } do
+  for _, k in ipairs { "clean", "peek_view", "redraw_tree", "delete_range", "keymap", "restore_last", "history_step" } do
     fns["lspsaga.callhierarchy." .. k] = ch_mt[k]
   end
   local lines = {}
