@@ -320,6 +320,12 @@ function M.setup()
     orig_keymap(self)
     self:track_duplicates()
     local entry = track(self)
+    vim.keymap.set(
+      "n",
+      "?",
+      function() self:show_help() end,
+      { buffer = self.left_bufnr, nowait = true, silent = true, desc = "Show call hierarchy keys" }
+    )
     vim.api.nvim_create_autocmd("CursorMoved", {
       group = vim.api.nvim_create_augroup("SagaCallhierarchyHistory", { clear = true }),
       buffer = self.left_bufnr,
@@ -358,6 +364,85 @@ function M.setup()
       end,
       { buffer = self.left_bufnr, nowait = true, silent = true, desc = "Delete selected entries from call hierarchy" }
     )
+  end
+
+  -- `?`: list every key for the tree in a float. lspsaga's own keys (bound without a desc) come from
+  -- its config with labels from SAGA_KEYS; ours are read from the tree buffer's keymaps by `desc`, so
+  -- new ones show up on their own; the global ones (<Leader>lc …) are those whose desc mentions calls.
+  local SAGA_KEYS = {
+    { "toggle_or_req", "Expand / collapse (requests the next level)" },
+    { "edit", "Jump to entry" },
+    { "vsplit", "Jump to entry in a vertical split" },
+    { "split", "Jump to entry in a horizontal split" },
+    { "tabe", "Jump to entry in a new tab" },
+    { "shuttle", "Switch between tree and preview" },
+    { "quit", "Close" },
+    { "close", "Close (also from the preview)" },
+  }
+  mt.show_help = function(self)
+    local rows = {}
+    local function add(lhs, desc)
+      for _, k in ipairs(vim.islist(lhs) and lhs or { lhs }) do
+        rows[#rows + 1] = { k, desc }
+      end
+    end
+    for _, k in ipairs(SAGA_KEYS) do
+      add(saga_config.callhierarchy.keys[k[1]], k[2])
+    end
+    for _, mode in ipairs { "n", "x" } do
+      -- which-key adds buffer-local trigger maps (desc "which-key-trigger …") once the buffer is entered
+      local maps = vim.tbl_filter(
+        function(m) return m.desc and not m.desc:find "^which%-key" end,
+        vim.api.nvim_buf_get_keymap(self.left_bufnr, mode)
+      )
+      table.sort(maps, function(a, b) return a.lhs < b.lhs end)
+      for _, m in ipairs(maps) do
+        add(m.lhs:gsub("<lt>", "<"), m.desc .. (mode == "x" and " (visual)" or ""))
+      end
+    end
+    local leader = vim.g.mapleader or "\\"
+    local globals = vim.tbl_filter(
+      function(m) return m.desc and m.desc:lower():find "call" end,
+      vim.api.nvim_get_keymap "n"
+    )
+    table.sort(globals, function(a, b) return a.lhs < b.lhs end)
+    for _, m in ipairs(globals) do
+      local lhs = m.lhs:sub(1, #leader) == leader and "<Leader>" .. m.lhs:sub(#leader + 1) or m.lhs
+      add(lhs, m.desc .. " (global)")
+    end
+
+    local width = 0
+    for _, r in ipairs(rows) do
+      width = math.max(width, vim.fn.strdisplaywidth(r[1]))
+    end
+    local lines = vim.tbl_map(function(r) return (" %-" .. width .. "s  %s "):format(r[1], r[2]) end, rows)
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    local ns = vim.api.nvim_create_namespace "SagaCallhierarchyHelp"
+    for i = 1, #rows do
+      vim.api.nvim_buf_set_extmark(buf, ns, i - 1, 1, { end_col = 1 + #rows[i][1], hl_group = "Special" })
+    end
+    vim.bo[buf].modifiable, vim.bo[buf].bufhidden = false, "wipe"
+    local w = math.max(unpack(vim.tbl_map(vim.fn.strdisplaywidth, lines)))
+    local win = vim.api.nvim_open_win(buf, true, {
+      relative = "editor",
+      width = w,
+      height = #lines,
+      row = math.floor((vim.o.lines - #lines) / 2) - 1,
+      col = math.floor((vim.o.columns - w) / 2),
+      border = "rounded",
+      title = " Call hierarchy keys ",
+      title_pos = "center",
+      style = "minimal",
+      zindex = 200, -- above lspsaga's floats
+    })
+    local function close()
+      if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
+    end
+    for _, k in ipairs { "q", "<Esc>", "?" } do
+      vim.keymap.set("n", k, close, { buffer = buf, nowait = true, silent = true })
+    end
+    vim.api.nvim_create_autocmd("WinLeave", { buffer = buf, once = true, callback = close })
   end
 
   -- Reopen history entry `idx` (default: the one viewed last), or focus the tree if it's open.
