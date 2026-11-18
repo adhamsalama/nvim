@@ -43,6 +43,14 @@ local function restart(toplevel)
   end
   if vim.tbl_isempty(names) then return end
   vim.cmd "silent! checktime" -- pick up files the checkout changed before servers re-read them
+  -- NOTE: known leftover after a restart (Nvim 0.12): the old client's *pull* diagnostics
+  -- (namespace `nvim.lsp.<name>.<id>.<provider>`) can stay on screen at positions from the previous
+  -- branch, e.g. a DiagnosticUnnecessary dim + hint undercurl cutting through an identifier.
+  -- `Client:_on_detach` only resets the push namespace (`nvim.lsp.<name>.<id>`); pull namespaces are
+  -- cleared by the LspDetach handler in vim/lsp/diagnostic.lua, and only when no *other* attached
+  -- client pulls diagnostics for the buffer (e.g. eslint alongside tsc), so they're never cleared.
+  -- Fix if it gets annoying: an LspDetach autocmd that resets every `nvim.lsp.<name>.<id>.*`
+  -- namespace (see nvim_get_namespaces()) for the detaching client.
   for name in pairs(names) do
     vim.cmd("LspRestart " .. name)
   end
