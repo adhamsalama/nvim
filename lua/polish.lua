@@ -21,6 +21,9 @@
 
 vim.opt.guicursor = "n-v-c-sm:block,ci-ve:ver25,r-cr-o:hor20,i:block-blinkwait700-blinkoff400-blinkon250-Cursor/lCursor"
 
+-- Diff mode keeps each window's 'wrap' instead of turning it off (Claude diffs, :diffsplit, diffview)
+vim.opt.diffopt:append "followwrap"
+
 -- Custom quickfix text function to hide column numbers
 _G.qftextfunc_no_col = function(info)
   local items
