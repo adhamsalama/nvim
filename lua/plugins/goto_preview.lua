@@ -11,7 +11,28 @@ return {
       -- debug = false, -- Print debug information
       -- opacity = nil, -- 0-100 opacity level of the floating window where 100 is fully transparent.
       resizing_mappings = true, -- Binds arrow keys to resizing the floating window.
-      -- post_open_hook = nil, -- A function taking two arguments, a buffer and a window to be ran as a hook.
+      -- Shift+arrows move the preview window around (plain arrows resize it). The maps live on the previewed
+      -- file's buffer, so outside a float they fall back to the key's built-in behavior.
+      post_open_hook = function(buf)
+        local function move(key, dr, dc)
+          return function()
+            local win = vim.api.nvim_get_current_win()
+            if vim.api.nvim_win_get_config(win).relative == "" then return key end
+            vim.schedule(function()
+              if not vim.api.nvim_win_is_valid(win) then return end
+              local cfg = vim.api.nvim_win_get_config(win)
+              cfg.row, cfg.col = cfg.row + dr, cfg.col + dc
+              vim.api.nvim_win_set_config(win, cfg)
+            end)
+            return ""
+          end
+        end
+        local o = { buffer = buf, nowait = true, expr = true }
+        vim.keymap.set("n", "<S-Left>", move("<S-Left>", 0, -4), o)
+        vim.keymap.set("n", "<S-Right>", move("<S-Right>", 0, 4), o)
+        vim.keymap.set("n", "<S-Up>", move("<S-Up>", -2, 0), o)
+        vim.keymap.set("n", "<S-Down>", move("<S-Down>", 2, 0), o)
+      end,
       -- post_close_hook = nil, -- A function taking two arguments, a buffer and a window to be ran as a hook.
       references = { provider = "snacks" }, -- telescope|fzf_lua|snacks|mini_pick|default
       -- These two configs can also be passed down to the goto-preview definition and implementation calls for one off "peak" functionality.
