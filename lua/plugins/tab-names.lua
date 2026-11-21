@@ -22,7 +22,7 @@ return {
 
       -- Keep plugin tabs (by name) to the right of regular tabs: a new plugin tab
       -- moves to the end, and a new regular tab moves in front of the plugin tabs.
-      local plugin_tabs = { GitGraph = true, DB = true, kubectl = true, HTTP = true, Claude = true }
+      local plugin_tabs = require("resession.extensions.tab_names").plugin_tabs
       opts.autocmds = opts.autocmds or {}
       opts.autocmds.plugin_tabs_right = {
         {

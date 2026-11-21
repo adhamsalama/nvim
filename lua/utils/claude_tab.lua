@@ -22,6 +22,7 @@ M.dock_height = 0.4 -- fraction of the editor height
 ---@field config table effective terminal config of the running Claude
 ---@field place ClaudePlace where Claude shows when opened
 ---@field place_once ClaudePlace? overrides `place` for the next open
+---@field focus_once boolean? overrides the focus argument of the next open
 local state = { config = {}, place = "tab" }
 
 local function running(job) return job ~= nil and vim.fn.jobwait({ job }, 0)[1] == -1 end
@@ -239,6 +240,19 @@ function M.focus_tab()
   if alive() and state.place == "tab" then show_tab(true) end
 end
 
+---Where Claude shows while it's running, for sessions to save.
+---@return ClaudePlace?
+function M.running_place() return alive() and state.place or nil end
+
+---Starts Claude with `--continue` (the last conversation in its working directory) in `place`, without focus, for
+---session restore.
+---@param place ClaudePlace
+function M.resume(place)
+  if alive() then return end
+  state.place_once, state.focus_once = place, false
+  require("claudecode.terminal").open({}, "--continue")
+end
+
 -- Provider interface (claudecode.nvim lua/claudecode/terminal/README.md)
 
 function M.setup(config) state.config = config or {} end
@@ -250,6 +264,9 @@ function M.get_active_bufnr() return alive() and state.buf or nil end
 function M.open(cmd_string, env_table, config, focus)
   local place = state.place_once or state.place
   state.place_once, state.place = nil, place
+  if state.focus_once ~= nil then
+    focus, state.focus_once = state.focus_once, nil
+  end
   if not alive() then forget() end
   local show = place == "dock" and show_dock or show_tab
   show(focus ~= false, cmd_string, env_table, config)
