@@ -148,6 +148,10 @@ return {
         -- list all snacks picker sources
         ["<Leader>F"] = { function() Snacks.picker() end, desc = "Find pickers" },
 
+        -- swap AstroNvim's default split keys
+        ["<Leader>\\"] = { "<Cmd>vsplit<CR>", desc = "Vertical Split" },
+        ["<Leader>|"] = { "<Cmd>split<CR>", desc = "Horizontal Split" },
+
         -- mappings seen under group name "Buffer"
         ["<Leader>bd"] = {
           function()
