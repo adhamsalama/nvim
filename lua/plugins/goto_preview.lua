@@ -11,9 +11,25 @@ return {
       -- debug = false, -- Print debug information
       -- opacity = nil, -- 0-100 opacity level of the floating window where 100 is fully transparent.
       resizing_mappings = true, -- Binds arrow keys to resizing the floating window.
-      -- Shift+arrows move the preview window around (plain arrows resize it). The maps live on the previewed
-      -- file's buffer, so outside a float they fall back to the key's built-in behavior.
-      post_open_hook = function(buf)
+      -- Each preview's title starts with its depth in the stack (1 = opened from a normal window, 2 = from
+      -- preview 1, ...). Shift+arrows move the preview window around (plain arrows resize it). The maps live on
+      -- the previewed file's buffer, so outside a float they fall back to the key's built-in behavior.
+      post_open_hook = function(buf, win)
+        -- The depth comes from the window the preview is anchored to, not goto-preview's own window list: its
+        -- WinClosed handler drops the *current* window from that list whenever any window closes (e.g. the
+        -- which-key popup for `gL`). The hook also runs each time a preview is re-entered, so number it once.
+        local cfg = vim.api.nvim_win_get_config(win)
+        if cfg.relative == "win" and not vim.w[win].goto_preview_depth then
+          local parent = cfg.win
+          local depth = (parent and vim.api.nvim_win_is_valid(parent) and vim.w[parent].goto_preview_depth or 0) + 1
+          vim.w[win].goto_preview_depth = depth
+          local title = cfg.title or {}
+          if type(title) == "string" then title = { { title } } end
+          table.insert(title, 1, { " " .. depth .. " ", "IncSearch" })
+          table.insert(title, 2, { " " })
+          vim.api.nvim_win_set_config(win, { title = title, title_pos = cfg.title_pos or "left" })
+        end
+
         local function move(key, dr, dc)
           return function()
             local win = vim.api.nvim_get_current_win()
