@@ -132,6 +132,22 @@ local function right_align_names()
   end
 end
 
+-- Colors from the colorscheme instead of the plugin's fixed red (signs.mark.color / line_bg, turned off in opts): the
+-- icon and name take DiagnosticInfo's color, and a bookmarked line gets that color blended faintly into the background.
+local function theme_highlights()
+  local function get(group, attr) return vim.api.nvim_get_hl(0, { name = group, link = false })[attr] end
+  local accent = get("DiagnosticInfo", "fg") or get("Special", "fg")
+  local bg = get("Normal", "bg")
+  vim.api.nvim_set_hl(0, "BookmarksNvimSign", { fg = accent })
+  if not (accent and bg) then return vim.api.nvim_set_hl(0, "BookmarksNvimLine", { link = "CursorLine" }) end
+  local alpha, blended = 0.15, 0
+  for shift = 16, 0, -8 do -- per channel: alpha * accent + (1 - alpha) * bg
+    local a, b = bit.band(bit.rshift(accent, shift), 0xff), bit.band(bit.rshift(bg, shift), 0xff)
+    blended = blended + bit.lshift(math.floor(alpha * a + (1 - alpha) * b + 0.5), shift)
+  end
+  vim.api.nvim_set_hl(0, "BookmarksNvimLine", { bg = blended })
+end
+
 return {
   {
     "LintaoAmons/bookmarks.nvim",
@@ -168,10 +184,16 @@ return {
       },
     },
     event = "VeryLazy",
-    opts = {},
+    opts = { signs = { mark = { color = false, line_bg = false } } }, -- colors: theme_highlights
     config = function(_, opts)
       require("bookmarks").setup(opts)
       sql_safe()
+      theme_highlights()
+      vim.api.nvim_create_autocmd("ColorScheme", {
+        group = vim.api.nvim_create_augroup("BookmarksThemeColors", { clear = true }),
+        callback = theme_highlights,
+        desc = "Bookmark colors from the colorscheme",
+      })
       right_align_names()
       activate_cwd_list()
       vim.api.nvim_create_autocmd({ "DirChanged", "FocusGained" }, {
