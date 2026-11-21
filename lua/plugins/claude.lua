@@ -56,6 +56,19 @@ function _G.ClaudeSetQuickfix(params)
   return #items
 end
 
+-- Called over $NVIM by the Stop / PermissionRequest hooks in ~/.claude/settings.json. Notifies only when Claude
+-- isn't in view: not shown in the current tab (the Claude tab is in the background, or the dock is closed).
+function _G.ClaudeNotifyIdle(msg)
+  vim.schedule(function()
+    if claude_term_win() then return end
+    -- noice's notify routing is off (lua/plugins/noice.lua), so vim.notify wouldn't reach it: call it directly.
+    local ok, noice = pcall(require, "noice")
+    local notify = ok and noice.notify or vim.notify
+    notify(msg or "Waiting for your input", vim.log.levels.INFO, { title = "Claude Code" })
+  end)
+  return ""
+end
+
 return {
   "coder/claudecode.nvim",
   dependencies = { "folke/snacks.nvim" },
