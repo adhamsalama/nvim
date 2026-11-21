@@ -155,6 +155,7 @@ return {
 
         -- swap AstroNvim's default split keys
         ["<Leader>\\"] = { "<Cmd>vsplit<CR>", desc = "Vertical Split" },
+        gb = { "<Cmd>vsplit<CR>", desc = "Vertical Split" },
         ["<Leader>|"] = { "<Cmd>split<CR>", desc = "Horizontal Split" },
 
         -- mappings seen under group name "Buffer"
