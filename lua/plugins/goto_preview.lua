@@ -36,9 +36,10 @@ return {
             if vim.api.nvim_win_get_config(win).relative == "" then return key end
             vim.schedule(function()
               if not vim.api.nvim_win_is_valid(win) then return end
-              local cfg = vim.api.nvim_win_get_config(win)
-              cfg.row, cfg.col = cfg.row + dr, cfg.col + dc
-              vim.api.nvim_win_set_config(win, cfg)
+              -- Re-place it relative to the editor at its current screen spot: a stacked preview is anchored to the
+              -- preview it came from, and once that one closes its config still names the dead window id.
+              local pos = vim.api.nvim_win_get_position(win)
+              vim.api.nvim_win_set_config(win, { relative = "editor", row = pos[1] + dr, col = pos[2] + dc })
             end)
             return ""
           end
@@ -62,6 +63,22 @@ return {
       -- zindex = 1, -- Starting zindex for the stack of floating windows
       -- vim_ui_input = true, -- Whether to override vim.ui.input with a goto-preview floating window
     } -- Ensure plugin is properly configured
+
+    -- A stacked preview is anchored to the preview it was opened from. When that one closes, Neovim re-anchors the
+    -- orphan elsewhere (it jumps to another split), so pin it to the editor at its current screen spot first.
+    vim.api.nvim_create_autocmd("WinClosed", {
+      group = vim.api.nvim_create_augroup("goto_preview_pin_orphans", { clear = true }),
+      callback = function(args)
+        local closed = tonumber(args.match)
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          local cfg = vim.api.nvim_win_get_config(win)
+          if win ~= closed and cfg.relative == "win" and cfg.win == closed and vim.w[win].goto_preview_depth then
+            local pos = vim.api.nvim_win_get_position(win)
+            vim.api.nvim_win_set_config(win, { relative = "editor", row = pos[1], col = pos[2] })
+          end
+        end
+      end,
+    })
 
     -- Define key mappings under <leader>lg
     local keymaps = {
