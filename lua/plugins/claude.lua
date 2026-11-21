@@ -111,6 +111,15 @@ return {
       end,
       desc = "Claude Code terminal keymaps",
     })
+
+    -- A send to a running Claude only makes sure it shows somewhere (focus_after_send = false). The bottom dock is then
+    -- in view, but the Claude tab is in the background, so go there to write the prompt.
+    vim.api.nvim_create_autocmd("User", {
+      group = vim.api.nvim_create_augroup("ClaudeCodeSendFocus", { clear = true }),
+      pattern = "ClaudeCodeSendComplete",
+      callback = function() vim.schedule(claude_tab.focus_tab) end,
+      desc = "Go to the Claude tab after sending to Claude",
+    })
   end,
   keys = {
     { "<leader>ac", function() claude_tab.toggle_tab() end, desc = "Toggle Claude tab" },

@@ -234,6 +234,11 @@ end
 function M.toggle_tab() toggle "tab" end
 function M.toggle_dock() toggle "dock" end
 
+---Goes to the Claude tab when Claude is running and shows in a tab (a dock is already in view, so it's left alone).
+function M.focus_tab()
+  if alive() and state.place == "tab" then show_tab(true) end
+end
+
 -- Provider interface (claudecode.nvim lua/claudecode/terminal/README.md)
 
 function M.setup(config) state.config = config or {} end
