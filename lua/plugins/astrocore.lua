@@ -147,6 +147,11 @@ return {
 
         -- list all snacks picker sources
         ["<Leader>F"] = { function() Snacks.picker() end, desc = "Find pickers" },
+        -- <Leader>fl limited to the outermost function around the cursor
+        ["?"] = {
+          function() require("utils.function_lines").pick() end,
+          desc = "Find lines in current function",
+        },
 
         -- swap AstroNvim's default split keys
         ["<Leader>\\"] = { "<Cmd>vsplit<CR>", desc = "Vertical Split" },
