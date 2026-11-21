@@ -2,7 +2,12 @@
 -- typing " ac" (e.g. "an account") in the Claude prompt would hide the window.
 local toggle_key = "<C-,>"
 
--- The Claude terminal window, when it's visible in the current tab.
+-- Claude shows alone in a tab named "Claude" or docked at the bottom of the current tab (lua/utils/claude_tab.lua).
+-- In a diff tab it's docked at the bottom too, as high as the dock.
+local claude_tab = require "utils.claude_tab"
+local docked_height = claude_tab.dock_height
+
+-- The Claude terminal window, when it's visible in the current tab (the Claude tab, a dock or a diff tab).
 local function claude_term_win()
   local term_buf = require("claudecode.terminal").get_active_terminal_bufnr()
   if not term_buf then return end
@@ -14,7 +19,10 @@ end
 -- Opens the quickfix window without moving focus out of the Claude terminal. :copen is run from an editor window
 -- because bqf places its preview relative to the window :copen came from (winnr("#")): run from the terminal,
 -- the preview would cover it. The ClaudeCodeTermAtBottom autocmd then keeps the terminal below the list.
+-- From the Claude tab, which holds only Claude, the list opens in the editor tab, and that tab becomes current.
 local function open_quickfix()
+  local editor_tab = claude_tab.is_claude_tab() and claude_tab.editor_tab()
+  if editor_tab then vim.api.nvim_set_current_tabpage(editor_tab) end
   local cur_win = vim.api.nvim_get_current_win()
   local from = cur_win
   for _, win in ipairs { cur_win, vim.fn.win_getid(vim.fn.winnr "#"), unpack(vim.api.nvim_tabpage_list_wins(0)) } do
@@ -59,16 +67,16 @@ return {
   config = function(_, opts)
     require("claudecode").setup(opts)
 
-    -- Keep the Claude terminal as the full-width bottom window: anything else opened botright (:copen, reopening
-    -- the quickfix list after :cclose, ...) would otherwise land below it.
+    -- Keep the docked Claude terminal (a dock or in a diff tab) as the full-width bottom window: anything else opened botright
+    -- (:copen, reopening the quickfix list after :cclose, ...) would otherwise land below it.
     local function move_term_to_bottom()
       local term_win = claude_term_win()
-      if not term_win then return end
+      if not term_win or claude_tab.is_claude_tab() then return end
       local layout = vim.fn.winlayout()
       local last = layout[1] == "col" and layout[2][#layout[2]]
       if last and last[1] == "leaf" and last[2] == term_win then return end
       vim.api.nvim_win_call(term_win, function() vim.cmd "wincmd J" end)
-      vim.api.nvim_win_set_height(term_win, math.floor(vim.o.lines * opts.terminal.snacks_win_opts.height))
+      vim.api.nvim_win_set_height(term_win, math.floor(vim.o.lines * docked_height))
     end
     vim.api.nvim_create_autocmd({ "WinNew", "BufWinEnter" }, {
       group = vim.api.nvim_create_augroup("ClaudeCodeTermAtBottom", { clear = true }),
@@ -77,8 +85,7 @@ return {
     })
 
     -- The diff tab always docks the Claude terminal as a vertical split on the side
-    -- (diff.lua `display_terminal_in_new_tab`, no option for it). Move it to the bottom,
-    -- matching the regular terminal's position and height.
+    -- (diff.lua `display_terminal_in_new_tab`, no option for it). Move it to the bottom.
     local diff = require "claudecode.diff"
     local orig_setup_blocking_diff = diff._setup_blocking_diff
     diff._setup_blocking_diff = function(...)
@@ -88,19 +95,30 @@ return {
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if vim.api.nvim_win_get_buf(win) == term_buf then
           vim.api.nvim_win_call(win, function() vim.cmd "wincmd J" end)
-          vim.api.nvim_win_set_height(win, math.floor(vim.o.lines * opts.terminal.snacks_win_opts.height))
+          vim.api.nvim_win_set_height(win, math.floor(vim.o.lines * docked_height))
           break
         end
       end
       return result
     end
+
+    -- The toggle key also works from terminal mode, in the Claude tab and where Claude is docked.
+    vim.api.nvim_create_autocmd("FileType", {
+      group = vim.api.nvim_create_augroup("ClaudeCodeTermKeys", { clear = true }),
+      pattern = "claudecode",
+      callback = function(args)
+        vim.keymap.set("t", toggle_key, "<cmd>ClaudeCode<cr>", { buffer = args.buf, desc = "Toggle Claude" })
+      end,
+      desc = "Claude Code terminal keymaps",
+    })
   end,
   keys = {
-    { "<leader>ac", "<cmd>ClaudeCode<cr>", desc = "Toggle Claude" },
+    { "<leader>ac", function() claude_tab.toggle_tab() end, desc = "Toggle Claude tab" },
+    { "<leader>aC", function() claude_tab.toggle_dock() end, desc = "Toggle Claude at bottom" },
+    -- Shows Claude where it was last (tab or bottom), or hides it
     { toggle_key, "<cmd>ClaudeCode<cr>", mode = { "n", "i" }, desc = "Toggle Claude" },
     { "<leader>af", "<cmd>ClaudeCodeFocus<cr>", desc = "Focus Claude" },
     { "<leader>ar", "<cmd>ClaudeCode --resume<cr>", desc = "Resume Claude" },
-    { "<leader>aC", "<cmd>ClaudeCode --continue<cr>", desc = "Continue Claude" },
     { "<leader>am", "<cmd>ClaudeCodeSelectModel<cr>", desc = "Select Claude model" },
     { "<leader>ab", "<cmd>ClaudeCodeAdd %<cr>", desc = "Add current buffer" },
     { "<leader>as", "<cmd>ClaudeCodeSend<cr>", mode = "v", desc = "Send to Claude" },
@@ -133,21 +151,7 @@ return {
 
     -- Terminal Configuration
     terminal = {
-      ---@module "snacks"
-      ---@type snacks.win.Config|{}
-      snacks_win_opts = {
-        position = "bottom",
-        height = 0.4,
-        width = 1.0,
-        keys = {
-          claude_hide = {
-            toggle_key,
-            function(self) self:hide() end,
-            mode = "t",
-            desc = "Hide",
-          },
-        },
-      },
+      provider = claude_tab, -- Claude in its own tab or docked at the bottom
     },
 
     -- Diff Integration
