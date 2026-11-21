@@ -24,6 +24,25 @@ vim.opt.guicursor = "n-v-c-sm:block,ci-ve:ver25,r-cr-o:hor20,i:block-blinkwait70
 -- Diff mode keeps each window's 'wrap' instead of turning it off (Claude diffs, :diffsplit, diffview)
 vim.opt.diffopt:append "followwrap"
 
+-- Neovim 0.12.0 segfaults when a diff window closes (e.g. claudecode.nvim's :tabclose of its diff tab on accept): the
+-- window getting its space reruns the diff, firing DiffUpdated while the closing window is still listed but has no
+-- buffer, and vim.fn.win_findbuf() in a DiffUpdated handler then dereferences NULL. The bug is Neovim's: any plugin
+-- calling win_findbuf() there crashes. Here it's render-markdown, which re-renders on DiffUpdated (filler lines move
+-- the text) and looks up the buffer's window with win_findbuf() to render for its width and view.
+-- No open issue upstream: neovim/neovim#38353 (a fix in win_findbuf) was closed unmerged, as not general enough since
+-- autocmds shouldn't run during that resize at all. Skip DiffUpdated until the close is done.
+vim.api.nvim_create_autocmd("WinClosed", {
+  group = vim.api.nvim_create_augroup("DiffCloseNoDiffUpdated", { clear = true }),
+  desc = "Ignore DiffUpdated while a diff window closes (avoids a crash)",
+  callback = function(args)
+    local win = tonumber(args.match)
+    if not (win and vim.api.nvim_win_is_valid(win) and vim.wo[win].diff) then return end
+    if vim.tbl_contains(vim.opt.eventignore:get(), "DiffUpdated") then return end
+    vim.opt.eventignore:append "DiffUpdated"
+    vim.schedule(function() vim.opt.eventignore:remove "DiffUpdated" end)
+  end,
+})
+
 -- Custom quickfix text function to hide column numbers
 _G.qftextfunc_no_col = function(info)
   local items
