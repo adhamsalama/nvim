@@ -3,9 +3,10 @@
 -- it shows in one place at a time. Diffs are unaffected: diff.lua opens each in a new tab and docks this provider's
 -- terminal buffer there (see the `_setup_blocking_diff` override in lua/plugins/claude.lua).
 --
--- toggle_tab / toggle_dock show Claude in that place, or hide it when it's already there. :ClaudeCode (and anything
--- else that opens Claude, like sending a selection) shows it where it was last, the tab at first. Hiding the Claude tab
--- goes back to the tab you came from. Claude keeps running while hidden.
+-- toggle_tab / toggle_dock show Claude in that place, or leave it when it's already there. :ClaudeCode (and anything
+-- else that opens Claude, like sending a selection) shows it where it was last, the tab at first. Leaving the Claude
+-- tab goes back to the tab you came from and keeps the tab open (close it with :tabclose); leaving the dock closes
+-- it. Claude keeps running either way.
 
 local M = {}
 
@@ -17,7 +18,7 @@ M.dock_height = 0.4 -- fraction of the editor height
 ---@class ClaudeTabState
 ---@field buf integer?
 ---@field job integer?
----@field prev_tab integer? the tab the Claude tab was entered from, to go back to
+---@field prev_tab integer? the last other tab that was current, to go back to from the Claude tab
 ---@field config table effective terminal config of the running Claude
 ---@field place ClaudePlace where Claude shows when opened
 ---@field place_once ClaudePlace? overrides `place` for the next open
@@ -75,7 +76,6 @@ end
 
 ---Opens an empty Claude tab after the last tab and makes it current.
 local function new_tab()
-  if not M.is_claude_tab() then state.prev_tab = vim.api.nvim_get_current_tabpage() end
   vim.cmd "$tabnew"
   vim.bo.bufhidden = "wipe" -- the empty buffer of :tabnew goes once Claude's replaces it
   vim.t.claude_tab = true
@@ -167,7 +167,6 @@ local function show_tab(focus, cmd_string, env_table, config)
     tab = vim.api.nvim_get_current_tabpage()
     if not focus then vim.api.nvim_set_current_tabpage(origin) end
   elseif focus and origin ~= tab then
-    state.prev_tab = origin
     vim.api.nvim_set_current_tabpage(tab)
   end
   if not focus then return end
@@ -203,12 +202,17 @@ local function show_dock(focus, cmd_string, env_table, config)
   start_insert()
 end
 
----Hides Claude when it shows in the current tab, as the Claude tab or a dock.
----@return boolean hidden
+---Leaves Claude when it shows in the current tab: goes back from the Claude tab (which stays open), closes a dock.
+---@return boolean left
 local function hide_here()
   if not alive() then return false end
   if M.is_claude_tab() then
-    close_tab()
+    local back = M.editor_tab()
+    if back then
+      vim.api.nvim_set_current_tabpage(back)
+    else
+      vim.cmd "tabnew" -- the Claude tab is the only one
+    end
     return true
   end
   local tab = vim.api.nvim_get_current_tabpage()
@@ -289,6 +293,15 @@ function M.ensure_visible()
     show_tab(false)
   end
 end
+
+-- Remember the tab to go back to from the Claude tab, however it was entered (toggle, gt, a click on the tabline).
+vim.api.nvim_create_autocmd("TabLeave", {
+  group = vim.api.nvim_create_augroup("ClaudeTabPrev", { clear = true }),
+  desc = "Remember the tab left for the Claude tab",
+  callback = function()
+    if not M.is_claude_tab() then state.prev_tab = vim.api.nvim_get_current_tabpage() end
+  end,
+})
 
 -- Enter terminal mode on entering Claude's window in its tab or dock (as Snacks' auto_insert did). Not in a diff tab:
 -- diff.lua handles that window, and an insert queued while it builds the layout would start in a diff window.

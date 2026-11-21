@@ -115,7 +115,7 @@ return {
   keys = {
     { "<leader>ac", function() claude_tab.toggle_tab() end, desc = "Toggle Claude tab" },
     { "<leader>aC", function() claude_tab.toggle_dock() end, desc = "Toggle Claude at bottom" },
-    -- Shows Claude where it was last (tab or bottom), or hides it
+    -- Shows Claude where it was last (tab or bottom), or leaves it
     { toggle_key, "<cmd>ClaudeCode<cr>", mode = { "n", "i" }, desc = "Toggle Claude" },
     { "<leader>af", "<cmd>ClaudeCodeFocus<cr>", desc = "Focus Claude" },
     { "<leader>ar", "<cmd>ClaudeCode --resume<cr>", desc = "Resume Claude" },
