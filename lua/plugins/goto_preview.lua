@@ -17,7 +17,7 @@ return {
       post_open_hook = function(buf, win)
         -- The depth comes from the window the preview is anchored to, not goto-preview's own window list: its
         -- WinClosed handler drops the *current* window from that list whenever any window closes (e.g. the
-        -- which-key popup for `gL`). The hook also runs each time a preview is re-entered, so number it once.
+        -- which-key popup for `gp`). The hook also runs each time a preview is re-entered, so number it once.
         local cfg = vim.api.nvim_win_get_config(win)
         if cfg.relative == "win" and not vim.w[win].goto_preview_depth then
           local parent = cfg.win
@@ -80,22 +80,23 @@ return {
       end,
     })
 
-    -- Define key mappings under <leader>lg
+    -- `gp` + the LSP key for the same lookup (gd/gD/gI/grr/gy); `gh` is a shortcut for the most common one
     local keymaps = {
-      ["gLD"] = { function() require("goto-preview").goto_preview_declaration() end, "Preview Declaration" },
-      ["gLP"] = { function() require("goto-preview").close_all_win() end, "Close Preview Windows" },
-      ["gLd"] = { function() require("goto-preview").goto_preview_definition() end, "Preview Definition" },
-      ["gLi"] = {
+      ["gh"] = { function() require("goto-preview").goto_preview_definition() end, "Preview Definition" },
+      ["gpd"] = { function() require("goto-preview").goto_preview_definition() end, "Preview Definition" },
+      ["gpD"] = { function() require("goto-preview").goto_preview_declaration() end, "Preview Declaration" },
+      ["gpi"] = {
         function() require("goto-preview").goto_preview_implementation() end,
         "Preview Implementation",
       },
-      ["gLr"] = { function() require("goto-preview").goto_preview_references() end, "Preview References" },
-      ["gLt"] = {
+      ["gpr"] = { function() require("goto-preview").goto_preview_references() end, "Preview References" },
+      ["gpy"] = {
         function() require("goto-preview").goto_preview_type_definition() end,
         "Preview Type Definition",
       },
+      ["gP"] = { function() require("goto-preview").close_all_win() end, "Close Preview Windows" },
     }
-    vim.keymap.set("n", "gL", "<Nop>", { desc = "LSP & Goto Preview" })
+    vim.keymap.set("n", "gp", "<Nop>", { desc = "Goto Preview" })
     -- Register keymaps
     for key, map in pairs(keymaps) do
       vim.keymap.set("n", key, map[1], { desc = map[2], silent = true })
