@@ -60,7 +60,9 @@ return {
       -- stack_floating_preview_windows = true, -- Whether to nest floating windows
       -- same_file_float_preview = true, -- Whether to open a new floating window for a reference within the current file
       -- preview_window_title = { enable = true, position = "left" }, -- Whether to set the preview window title as the filename
-      -- zindex = 1, -- Starting zindex for the stack of floating windows
+      -- Start above treesitter-context's floats (zindex 20): a preview's sticky context header would otherwise draw
+      -- over the previews stacked on top of it. Context headers inside previews end up hidden under their preview.
+      zindex = 21,
       -- vim_ui_input = true, -- Whether to override vim.ui.input with a goto-preview floating window
     } -- Ensure plugin is properly configured
 
