@@ -6,6 +6,7 @@
 --   lsp/perf/slow           warn about / log requests slower than 5s (:LspSlow)
 --   lsp/perf/pending        statusline spinner (wired in heirline.lua)
 --   lsp/branch_reload       restart clients when the project's git branch changes
+--   lsp/fold_refresh        recompute LSP folds in every window of the buffer, in every tab
 --   lsp/functions_picker    pickers limited to named functions and methods
 --   lsp/ref_count           reference counts above functions
 --   lsp/tsgo/references     `grr`/`grR` that follow export objects (tsgo)
@@ -47,6 +48,7 @@ return {
         callback = function() require("lsp.branch_reload").stop_all() end,
       },
     }
+    opts.autocmds.lsp_fold_refresh = require("lsp.fold_refresh").autocmds
     -- `grr` on tsgo stops at `export default { fn }` / `module.exports = { fn }` instead of listing
     -- the `Obj.fn()` call sites across files; replace it with a handler that follows the export
     -- object. Scheduled so it runs after the core/AstroNvim LspAttach that sets the default `grr`,
