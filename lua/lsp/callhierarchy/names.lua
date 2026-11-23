@@ -7,6 +7,14 @@ local fn_types, var_types = C.fn_types, C.var_types
 
 local M = {}
 
+-- functions that carry their own `name` field (JS, Go, Python)
+local named_fn_types = {
+  method_definition = true,
+  function_declaration = true,
+  method_declaration = true,
+  function_definition = true,
+}
+
 local function key_target(name)
   if name and name:type() == "computed_property_name" then name = name:named_child(0) end
   if name and name:type() == "member_expression" then name = name:field("property")[1] end
@@ -21,7 +29,7 @@ local function enclosing_name(uri, pos)
   while node do
     local t = node:type()
     local name
-    if t == "method_definition" or t == "function_declaration" or t == "method_declaration" then -- last: Go
+    if named_fn_types[t] then
       name = node:field("name")[1]
     elseif fn_types[t] then
       local parent = node:parent()
@@ -49,9 +57,10 @@ local function enclosing_binding(uri, pos)
       name = node:field("name")[1]
     elseif t == "pair" then
       name = node:field("key")[1]
-    elseif t == "assignment_expression" then
+    elseif t == "assignment_expression" or t == "assignment" then -- last: Python
       name = node:field("left")[1]
       if name and name:type() == "member_expression" then name = name:field("property")[1] end
+      if name and name:type() == "attribute" then name = name:field("attribute")[1] end -- Python `self.x = ...`
     end
     if name then
       name = key_target(name)

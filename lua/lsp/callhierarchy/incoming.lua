@@ -10,12 +10,16 @@ local function orig_request(...) return C.request(...) end
 
 local M = {}
 
+local call_types = { call_expression = true, call = true } -- JS/Go, Python
+local args_types = { arguments = true, argument_list = true } -- JS, Go/Python
+
 local function reference_entry(loc)
   local bufnr, node = ts_node_at(loc.uri, loc.range.start)
   local parent = node and node:parent()
   if not parent then return end
   local access = (parent:type() == "member_expression" and parent:field("property")[1] == node)
     or (parent:type() == "selector_expression" and parent:field("field")[1] == node) -- Go `x.Method`
+    or (parent:type() == "attribute" and parent:field("attribute")[1] == node) -- Python `x.method`
     or (parent:type() == "subscript_expression" and parent:field("index")[1] == node)
   local outer_sub = access and parent:parent()
   if outer_sub and outer_sub:type() == "subscript_expression" and outer_sub:field("index")[1] == parent then
@@ -25,20 +29,19 @@ local function reference_entry(loc)
   local call = callee:parent()
   local entry = { kind = FUNCTION_KIND, uri = loc.uri, range = loc.range, selectionRange = loc.range }
 
-  if call and call:type() == "call_expression" and call:field("function")[1] == callee then
+  if call and call_types[call:type()] and call:field("function")[1] == callee then
     local name, ref_pos = enclosing_name(loc.uri, loc.range.start)
     entry.name = name or ("%s:%d"):format(rel_path(loc.uri), loc.range.start.line + 1)
     entry.__ref_pos, entry.__ref_leaf = ref_pos, not ref_pos or nil
     return entry
   end
-  local args_types = { arguments = true, argument_list = true } -- JS, Go
   local passed = not access and args_types[parent:type()]
   if not (access or passed) then return end
 
   local object = passed and text(node, bufnr) or text(parent:field("object")[1] or parent:field("operand")[1], bufnr)
   local outer
   for n in function(_, cur) return cur:parent() end, nil, node do
-    if args_types[n:type()] and n:parent() and n:parent():type() == "call_expression" then outer = n end
+    if args_types[n:type()] and n:parent() and call_types[n:parent():type()] then outer = n end
   end
   if passed and not outer then return end -- `new X(fn)` and the like
   if outer then

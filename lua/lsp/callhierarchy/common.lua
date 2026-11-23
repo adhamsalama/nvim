@@ -5,7 +5,13 @@ local tsgo = require "lsp.tsgo"
 local M = {}
 
 M.FILE_KINDS, M.FUNCTION_KIND = { [1] = true, [2] = true }, 12 -- File, Module
-M.fn_types = { arrow_function = true, function_expression = true, ["function"] = true, generator_function = true }
+M.fn_types = {
+  arrow_function = true,
+  function_expression = true,
+  ["function"] = true,
+  generator_function = true,
+  lambda = true, -- Python
+}
 -- identifiers that get a `__var` root (see prepare.lua) and can name a binding (see names.lua)
 M.var_types = {
   identifier = true,
