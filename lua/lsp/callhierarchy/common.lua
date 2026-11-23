@@ -11,6 +11,7 @@ M.fn_types = {
   ["function"] = true,
   generator_function = true,
   lambda = true, -- Python
+  closure_expression = true, -- Rust
 }
 -- identifiers that get a `__var` root (see prepare.lua) and can name a binding (see names.lua)
 M.var_types = {

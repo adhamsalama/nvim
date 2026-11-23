@@ -15,14 +15,17 @@ function M.load_buf(uri)
   return bufnr
 end
 
-function M.ts_node_at(uri, pos)
+-- innermost node at `pos`, inside injections (Rust macro arguments are reparsed as Rust, so a call
+-- there is still a call) unless `host` is set
+function M.ts_node_at(uri, pos, host)
   local bufnr = M.load_buf(uri)
   local ft = vim.bo[bufnr].filetype
   if ft == "" then ft = vim.filetype.match { buf = bufnr } or "" end
   local ok, parser = pcall(vim.treesitter.get_parser, bufnr, vim.treesitter.language.get_lang(ft) or ft)
   if not ok or not parser then return end
   parser:parse()
-  return bufnr, vim.treesitter.get_node { bufnr = bufnr, pos = { pos.line, pos.character }, ignore_injections = false }
+  return bufnr,
+    vim.treesitter.get_node { bufnr = bufnr, pos = { pos.line, pos.character }, ignore_injections = host == true }
 end
 
 function M.ensure_attached(client, bufnr)

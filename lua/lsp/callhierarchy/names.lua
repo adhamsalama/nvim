@@ -7,12 +7,22 @@ local fn_types, var_types = C.fn_types, C.var_types
 
 local M = {}
 
--- functions that carry their own `name` field (JS, Go, Python)
+-- variable declarations that carry their own `name` field (JS, Go, Rust)
+local binding_types = {
+  variable_declarator = true,
+  var_spec = true,
+  const_spec = true,
+  const_item = true,
+  static_item = true,
+}
+
+-- functions that carry their own `name` field (JS, Go, Python, Rust)
 local named_fn_types = {
   method_definition = true,
   function_declaration = true,
   method_declaration = true,
   function_definition = true,
+  function_item = true,
 }
 
 local function key_target(name)
@@ -24,8 +34,7 @@ end
 -- name of the function enclosing `pos`, plus where to ask for references to it.
 -- `method_definition` / `function_declaration` carry their own `name`; arrow and function
 -- expressions are anonymous, so take the key/name/left of whatever binds them.
-local function enclosing_name(uri, pos)
-  local bufnr, node = ts_node_at(uri, pos)
+local function name_from(bufnr, node)
   while node do
     local t = node:type()
     local name
@@ -33,7 +42,13 @@ local function enclosing_name(uri, pos)
       name = node:field("name")[1]
     elseif fn_types[t] then
       local parent = node:parent()
-      name = parent and (parent:field("key")[1] or parent:field("name")[1] or parent:field("left")[1])
+      name = parent
+        and (
+          parent:field("key")[1]
+          or parent:field("name")[1]
+          or parent:field("left")[1]
+          or parent:field("pattern")[1] -- Rust `let f = || ...`
+        )
     end
     if name then
       -- for `[KEY]: ...` reference the constant, not the brackets
@@ -48,19 +63,21 @@ end
 -- Outside any function, the value a reference is part of: `const X = [ref]`, `X: ref`,
 -- `module.exports.X = ref`. Returns the binding's name and its position, so the entry can expand
 -- as a variable in turn.
-local function enclosing_binding(uri, pos)
-  local bufnr, node = ts_node_at(uri, pos)
+local function binding_from(bufnr, node)
   local start = node
   while node do
     local t, name = node:type()
-    if t == "variable_declarator" or t == "var_spec" or t == "const_spec" then -- last two: Go
+    if binding_types[t] then
       name = node:field("name")[1]
+    elseif t == "let_declaration" then -- Rust
+      name = node:field("pattern")[1]
     elseif t == "pair" then
       name = node:field("key")[1]
     elseif t == "assignment_expression" or t == "assignment" then -- last: Python
       name = node:field("left")[1]
       if name and name:type() == "member_expression" then name = name:field("property")[1] end
       if name and name:type() == "attribute" then name = name:field("attribute")[1] end -- Python `self.x = ...`
+      if name and name:type() == "field_expression" then name = name:field("field")[1] end -- Rust `self.x = ...`
     end
     if name then
       name = key_target(name)
@@ -74,6 +91,19 @@ local function enclosing_binding(uri, pos)
     node = node:parent()
   end
 end
+
+-- Walks up from the node at `pos`; an injected tree ends at its own root (inside a Rust macro the
+-- function is outside it), so when that finds nothing, walk the host tree from the same position.
+local function walk(from, uri, pos)
+  local bufnr, node = ts_node_at(uri, pos)
+  local name, ref_pos = from(bufnr, node)
+  if name or not node then return name, ref_pos end
+  local _, host = ts_node_at(uri, pos, true)
+  if host and not host:equal(node) then return from(bufnr, host) end
+end
+
+local function enclosing_name(uri, pos) return walk(name_from, uri, pos) end
+local function enclosing_binding(uri, pos) return walk(binding_from, uri, pos) end
 
 -- tsserver only prepares a call hierarchy with the cursor exactly on the function's name. With it
 -- elsewhere on the declaration line (`async`, the indent, the parameters), point at the name.

@@ -20,6 +20,8 @@ local function reference_entry(loc)
   local access = (parent:type() == "member_expression" and parent:field("property")[1] == node)
     or (parent:type() == "selector_expression" and parent:field("field")[1] == node) -- Go `x.Method`
     or (parent:type() == "attribute" and parent:field("attribute")[1] == node) -- Python `x.method`
+    or (parent:type() == "field_expression" and parent:field("field")[1] == node) -- Rust `x.method`
+    or (parent:type() == "scoped_identifier" and parent:field("name")[1] == node) -- Rust `Type::f`
     or (parent:type() == "subscript_expression" and parent:field("index")[1] == node)
   local outer_sub = access and parent:parent()
   if outer_sub and outer_sub:type() == "subscript_expression" and outer_sub:field("index")[1] == parent then
@@ -38,7 +40,11 @@ local function reference_entry(loc)
   local passed = not access and args_types[parent:type()]
   if not (access or passed) then return end
 
-  local object = passed and text(node, bufnr) or text(parent:field("object")[1] or parent:field("operand")[1], bufnr)
+  local object = passed and text(node, bufnr)
+    or text(
+      parent:field("object")[1] or parent:field("operand")[1] or parent:field("value")[1] or parent:field("path")[1],
+      bufnr
+    )
   local outer
   for n in function(_, cur) return cur:parent() end, nil, node do
     if args_types[n:type()] and n:parent() and call_types[n:parent():type()] then outer = n end
