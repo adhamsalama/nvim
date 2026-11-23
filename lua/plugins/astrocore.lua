@@ -155,7 +155,13 @@ return {
 
         -- swap AstroNvim's default split keys
         ["<Leader>\\"] = { "<Cmd>vsplit<CR>", desc = "Vertical Split" },
-        gpb = { "<Cmd>vsplit<CR>", desc = "Vertical Split" },
+        gpb = {
+          function()
+            vim.cmd.vsplit()
+            vim.lsp.buf.definition()
+          end,
+          desc = "Go to definition in vertical split",
+        },
         ["<Leader>|"] = { "<Cmd>split<CR>", desc = "Horizontal Split" },
 
         -- mappings seen under group name "Buffer"
