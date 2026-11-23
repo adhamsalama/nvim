@@ -13,7 +13,11 @@ return {
   { import = "astrocommunity.pack.go" },
   { import = "astrocommunity.pack.golangci-lint" },
   { import = "astrocommunity.pack.java" },
-  { import = "astrocommunity.pack.python" },
+  -- Import sub-packs explicitly: importing "astrocommunity.pack.python" makes lazy.nvim load every
+  -- sub-pack in that directory (pyrefly, ty, black, isort, ...), not just its init.lua.
+  { import = "astrocommunity.pack.python.base" }, -- debugpy, venv-selector, neotest
+  { import = "astrocommunity.pack.python.basedpyright" },
+  { import = "astrocommunity.pack.python.ruff" }, -- lint + format (replaces black/isort)
   { import = "astrocommunity.pack.rust" },
   { import = "astrocommunity.pack.yaml" },
   { import = "astrocommunity.markdown-and-latex.render-markdown-nvim" },
