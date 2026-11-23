@@ -203,7 +203,7 @@ return {
         },
         ["<Leader>gT"] = false,
         ["<Leader>gg"] = false, -- AstroNvim's lazygit; <leader>gg opens the GitGraph workspace (gitgraph.lua)
-        ["<leader>gc"] = false,
+        ["<Leader>gc"] = false, -- AstroNvim's commit picker; <Leader>gc diffs the line's commit (diffview.lua)
         ["<Leader>gC"] = {
           function()
             local items, err = git_churn_items()
