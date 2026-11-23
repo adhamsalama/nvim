@@ -10,6 +10,7 @@ local function orig_request(...) return C.request(...) end
 
 local M = {}
 
+local string_types = { string = true, string_literal = true, interpreted_string_literal = true } -- JS/Python, Rust, Go
 local call_types = { call_expression = true, call = true } -- JS/Go, Python
 local args_types = { arguments = true, argument_list = true } -- JS, Go/Python
 
@@ -52,8 +53,11 @@ local function reference_entry(loc)
   if passed and not outer then return end -- `new X(fn)` and the like
   if outer then
     local first = outer:named_child(0)
-    local arg = first and first:type() == "string" and text(first, bufnr) or ""
-    entry.name = ("%s(%s) · %s"):format(text(outer:parent():field("function")[1], bufnr), arg, object)
+    local arg = first and string_types[first:type()] and text(first, bufnr) or ""
+    -- a method chain over several lines (`Router::new()\n  .route("/x", h)`) would put the whole
+    -- chain before it in the name: keep its last line, `.route`
+    local fn = text(outer:parent():field("function")[1], bufnr):match("([^\n]*)$"):gsub("^%s+", "")
+    entry.name = ("%s(%s) · %s"):format(fn, arg, object)
   elseif not passed then
     entry.name = parent:type() == "subscript_expression" and ("%s[…]"):format(object) or text(parent, bufnr)
   end

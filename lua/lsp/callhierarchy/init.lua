@@ -10,12 +10,44 @@ local prepare_fallback = require("lsp.callhierarchy.prepare").prepare_fallback
 
 local M = {}
 
+-- lspsaga writes each name as one tree line, and buf_set_lines rejects one with a newline. Names
+-- built from treesitter text can span lines (`promise\n  .then(fn)`): join the lines, a method
+-- chain without a space.
+local function one_line(s)
+  return (s:gsub("%s*\n%s*(%.?)", function(dot) return dot ~= "" and dot or " " end))
+end
+
+local function flatten_names(res)
+  if type(res) ~= "table" then return end
+  for _, it in ipairs(res) do
+    for _, item in ipairs { it, it.from, it.to } do
+      if type(item) == "table" and type(item.name) == "string" and item.name:find "\n" then
+        item.name = one_line(item.name)
+      end
+    end
+  end
+end
+
+local saga_methods = {
+  ["textDocument/prepareCallHierarchy"] = true,
+  ["callHierarchy/incomingCalls"] = true,
+  ["callHierarchy/outgoingCalls"] = true,
+}
+
 function M.setup()
   local util = require "lspsaga.util"
   C.request = util.client_request
   local orig_request = C.request
 
   util.client_request = function(client, method, params, handler, ...)
+    -- wraps lspsaga's own handler, so it sees every result whichever path below answers
+    if saga_methods[method] and type(handler) == "function" then
+      local saga_handler = handler
+      handler = function(err, res, ...)
+        flatten_names(res)
+        return saga_handler(err, res, ...)
+      end
+    end
     local item = type(params) == "table" and type(params.item) == "table" and params.item
     if method == "callHierarchy/incomingCalls" and item and type(handler) == "function" then
       if item.__ref_leaf then
