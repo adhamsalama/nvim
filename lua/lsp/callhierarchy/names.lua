@@ -21,7 +21,7 @@ local function enclosing_name(uri, pos)
   while node do
     local t = node:type()
     local name
-    if t == "method_definition" or t == "function_declaration" then
+    if t == "method_definition" or t == "function_declaration" or t == "method_declaration" then -- last: Go
       name = node:field("name")[1]
     elseif fn_types[t] then
       local parent = node:parent()
@@ -45,7 +45,7 @@ local function enclosing_binding(uri, pos)
   local start = node
   while node do
     local t, name = node:type()
-    if t == "variable_declarator" then
+    if t == "variable_declarator" or t == "var_spec" or t == "const_spec" then -- last two: Go
       name = node:field("name")[1]
     elseif t == "pair" then
       name = node:field("key")[1]

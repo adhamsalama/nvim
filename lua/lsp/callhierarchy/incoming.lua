@@ -15,6 +15,7 @@ local function reference_entry(loc)
   local parent = node and node:parent()
   if not parent then return end
   local access = (parent:type() == "member_expression" and parent:field("property")[1] == node)
+    or (parent:type() == "selector_expression" and parent:field("field")[1] == node) -- Go `x.Method`
     or (parent:type() == "subscript_expression" and parent:field("index")[1] == node)
   local outer_sub = access and parent:parent()
   if outer_sub and outer_sub:type() == "subscript_expression" and outer_sub:field("index")[1] == parent then
@@ -30,13 +31,14 @@ local function reference_entry(loc)
     entry.__ref_pos, entry.__ref_leaf = ref_pos, not ref_pos or nil
     return entry
   end
-  local passed = not access and parent:type() == "arguments"
+  local args_types = { arguments = true, argument_list = true } -- JS, Go
+  local passed = not access and args_types[parent:type()]
   if not (access or passed) then return end
 
-  local object = passed and text(node, bufnr) or text(parent:field("object")[1], bufnr)
+  local object = passed and text(node, bufnr) or text(parent:field("object")[1] or parent:field("operand")[1], bufnr)
   local outer
   for n in function(_, cur) return cur:parent() end, nil, node do
-    if n:type() == "arguments" and n:parent() and n:parent():type() == "call_expression" then outer = n end
+    if args_types[n:type()] and n:parent() and n:parent():type() == "call_expression" then outer = n end
   end
   if passed and not outer then return end -- `new X(fn)` and the like
   if outer then

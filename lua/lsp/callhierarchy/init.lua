@@ -1,4 +1,3 @@
-
 local C = require "lsp.callhierarchy.common"
 local names = require "lsp.callhierarchy.names"
 local incoming = require "lsp.callhierarchy.incoming"
@@ -34,17 +33,27 @@ function M.setup()
     if method == "textDocument/prepareCallHierarchy" and type(handler) == "function" then
       local inner = handler
       local tried_decl, tried_def, req_args = false, false, { ... }
+      local prepare_err
       local function on_result(err, res, ...)
         local rest = { ... }
+        -- gopls answers a non-function with an error ("X is not a function") instead of an empty
+        -- result: treat it as empty, and hand it on only if no fallback below finds anything
+        if err and (res == nil or vim.tbl_isempty(res)) then
+          prepare_err, err = prepare_err or err, nil
+        end
         -- last resort: a function parked in an object property, which tsgo can't prepare
         local function finish()
-          if not err and (res == nil or vim.tbl_isempty(res)) then
+          if res == nil or vim.tbl_isempty(res) then
             local ok, fallback = pcall(prepare_fallback, params)
-            if ok and fallback then res = { fallback } end
+            if ok and fallback then
+              res = { fallback }
+            else
+              err = prepare_err
+            end
           end
           return inner(err, res, unpack(rest))
         end
-        if err or not (res == nil or vim.tbl_isempty(res)) then return finish() end
+        if not (res == nil or vim.tbl_isempty(res)) then return finish() end
         -- cursor on the declaration line but off the name (indent, `async`, params): aim at the name
         if not tried_decl then
           tried_decl = true
