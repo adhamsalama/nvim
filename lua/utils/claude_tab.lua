@@ -325,6 +325,62 @@ vim.api.nvim_create_autocmd("TabLeave", {
   end,
 })
 
+---@param win integer
+local function is_file_win(win)
+  return vim.api.nvim_win_get_config(win).relative == "" and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == ""
+end
+
+---Shows `buf` in a file window of `tab` (its current window when it is one), splitting when it has none.
+---@return integer win
+local function show_in_tab(tab, buf)
+  local win = vim.api.nvim_tabpage_get_win(tab)
+  if not is_file_win(win) then
+    win = vim.tbl_filter(is_file_win, vim.api.nvim_tabpage_list_wins(tab))[1]
+      or vim.api.nvim_open_win(buf, false, { split = "above", win = -1 })
+  end
+  vim.api.nvim_win_set_buf(win, buf)
+  return win
+end
+
+-- The Claude tab holds only Claude. A file opened into it moves to the editor tab: diffview's goto_file opens in the
+-- previous tab, which is the Claude tab when you came from it, and a picker or gf run from it opens there too.
+local function evict_files()
+  local tab = M.tab()
+  if not tab or not alive() then return end
+  local back = M.editor_tab()
+  if not back then return end
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+    if vim.api.nvim_win_is_valid(win) and is_file_win(win) then
+      local buf, cursor = vim.api.nvim_win_get_buf(win), vim.api.nvim_win_get_cursor(win)
+      local focused = win == vim.api.nvim_get_current_win()
+      -- Leave the Claude tab before closing the window, so the terminal's WinEnter insert doesn't fire on the way out.
+      if focused then vim.api.nvim_set_current_tabpage(back) end
+      local target = show_in_tab(back, buf)
+      pcall(vim.api.nvim_win_set_cursor, target, cursor)
+      if focused then vim.api.nvim_set_current_win(target) end
+      local others = vim.tbl_filter(
+        function(w) return w ~= win and vim.api.nvim_win_get_config(w).relative == "" end,
+        vim.api.nvim_tabpage_list_wins(tab)
+      )
+      if others[1] then
+        pcall(vim.api.nvim_win_close, win, false)
+      else
+        vim.api.nvim_win_set_buf(win, state.buf) -- it had replaced the terminal
+      end
+    end
+  end
+  vim.t[tab].bufs = {} -- AstroNvim's per-tab buffer list (the tabline) picked the files up
+  vim.cmd.redrawtabline()
+end
+
+vim.api.nvim_create_autocmd("BufWinEnter", {
+  group = vim.api.nvim_create_augroup("ClaudeTabOnlyClaude", { clear = true }),
+  desc = "Move files opened in the Claude tab to the editor tab",
+  callback = function()
+    if M.tab() then vim.schedule(evict_files) end
+  end,
+})
+
 -- Enter terminal mode on entering Claude's window in its tab or dock (as Snacks' auto_insert did). Not in a diff tab:
 -- diff.lua handles that window, and an insert queued while it builds the layout would start in a diff window.
 vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
