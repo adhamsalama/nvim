@@ -52,6 +52,7 @@ function M.pick()
 
   Snacks.picker.pick {
     title = "Tabs",
+    focus = "list", -- start in the list to move with j/k; `i` or `/` goes to the input
     items = items,
     format = function(item)
       return {
