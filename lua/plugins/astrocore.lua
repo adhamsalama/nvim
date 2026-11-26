@@ -147,6 +147,9 @@ return {
 
         -- list all snacks picker sources
         ["<Leader>F"] = { function() Snacks.picker() end, desc = "Find pickers" },
+        -- tabs take AstroNvim's <Leader>ft; themes move to <Leader>fT (replacing todo-comments' Find TODOs)
+        ["<Leader>ft"] = { function() require("utils.tab_picker").pick() end, desc = "Find tabs" },
+        ["<Leader>fT"] = { function() Snacks.picker.colorschemes() end, desc = "Find themes" },
         -- <Leader>fl limited to the outermost function around the cursor
         ["?"] = {
           function() require("utils.function_lines").pick() end,
