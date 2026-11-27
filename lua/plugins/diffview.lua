@@ -396,5 +396,18 @@ return {
       },
     }
   end,
+  config = function(_, opts)
+    require("diffview").setup(opts)
+    require("resession.extensions.diffview_tabs").track() -- views remember how to reopen in a session
+  end,
 },
+  -- Bring Diffview tabs back in sessions via `lua/resession/extensions/diffview_tabs.lua`.
+  {
+    "stevearc/resession.nvim",
+    optional = true,
+    opts = function(_, opts)
+      opts.extensions = opts.extensions or {}
+      opts.extensions.diffview_tabs = {}
+    end,
+  },
 }
