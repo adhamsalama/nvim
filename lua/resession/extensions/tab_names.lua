@@ -16,6 +16,27 @@ M.plugin_tabs = { [GITGRAPH_TAB] = true, DB = true, kubectl = true, HTTP = true,
 ---@param tab integer
 function M.is_plugin_tab(tab) return M.plugin_tabs[vim.t[tab].name or ""] == true or vim.t[tab].plugin_tab == true end
 
+local last_editor_tab ---@type integer?
+vim.api.nvim_create_autocmd("TabLeave", {
+  group = vim.api.nvim_create_augroup("LastEditorTab", { clear = true }),
+  desc = "Remember the last editor tab left",
+  callback = function()
+    local tab = vim.api.nvim_get_current_tabpage()
+    if not M.is_plugin_tab(tab) then last_editor_tab = tab end
+  end,
+})
+
+---The editor tab to open a file in from a plugin tab: the last one you were in, else the first one.
+---@return integer?
+function M.editor_tab()
+  local current = vim.api.nvim_get_current_tabpage()
+  if not M.is_plugin_tab(current) then return current end
+  if last_editor_tab and vim.api.nvim_tabpage_is_valid(last_editor_tab) and not M.is_plugin_tab(last_editor_tab) then
+    return last_editor_tab
+  end
+  return vim.tbl_filter(function(tab) return not M.is_plugin_tab(tab) end, vim.api.nvim_list_tabpages())[1]
+end
+
 ---@param opts resession.Extension.OnSaveOpts
 function M.on_save(opts)
   -- a tab-scoped session only holds its own tab

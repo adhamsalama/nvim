@@ -401,6 +401,10 @@ return {
   config = function(_, opts)
     require("diffview").setup(opts)
     require("resession.extensions.diffview_tabs").track() -- views remember how to reopen in a session
+    -- gf and the other goto_file actions open the file in the tab this returns (diffview's own: the last tab you were
+    -- in that isn't a view). Never a plugin tab (DB, GitGraph, Claude, ...): the editor tab you were last in, else
+    -- the first one; nil when there's none, and diffview opens a new tab.
+    require("diffview.lib").get_prev_non_view_tabpage = require("resession.extensions.tab_names").editor_tab
   end,
 },
   -- Bring Diffview tabs back in sessions via `lua/resession/extensions/diffview_tabs.lua`.
