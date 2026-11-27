@@ -126,6 +126,17 @@ return {
   opts = function(_, opts)
     local actions = require "diffview.actions"
 
+    -- The commit of the file history panel's entry under the cursor (or of the file entry's commit). Asked from the
+    -- panel, not parsed from the line: a line history (-L, <Leader>gF) lists commits without the `| +a -b |` stats.
+    ---@return string?
+    local function commit_at_cursor()
+      local view = require("diffview.lib").get_current_view()
+      local entry = view and view.panel and view.panel.get_log_entry_at_cursor and view.panel:get_log_entry_at_cursor()
+      local hash = entry and entry.commit and entry.commit.hash
+      if not hash then vim.notify("Could not find commit hash on this line", vim.log.levels.WARN) end
+      return hash
+    end
+
     opts.enhanced_diff_hl = true
     opts.diff_opts = {
       algorithm = "histogram",
@@ -281,16 +292,8 @@ return {
           "n",
           "gd",
           function()
-            -- Extract commit hash from current line in file history panel
-            -- Format: M | 0      1 | b4d22d45 Merge branch...
-            local line = vim.fn.getline "."
-            -- Match the commit hash after the second pipe: | ... | HASH
-            local commit_hash = line:match "|[^|]*|%s*(%x+)"
-            if commit_hash and #commit_hash >= 7 then
-              vim.cmd("DiffviewOpen " .. commit_hash .. "^!")
-            else
-              vim.notify("Could not find commit hash on this line", vim.log.levels.WARN)
-            end
+            local commit_hash = commit_at_cursor()
+            if commit_hash then vim.cmd("DiffviewOpen " .. commit_hash .. "^!") end
           end,
           { desc = "Open commit in diffview" },
         },
@@ -298,12 +301,8 @@ return {
           "n",
           "gH",
           function()
-            local line = vim.fn.getline "."
-            local commit_hash = line:match "|[^|]*|%s*(%x+)"
-            if not (commit_hash and #commit_hash >= 7) then
-              vim.notify("Could not find commit hash on this line", vim.log.levels.WARN)
-              return
-            end
+            local commit_hash = commit_at_cursor()
+            if not commit_hash then return end
             vim.fn.system { "git", "rev-parse", "--verify", "--quiet", commit_hash .. "^2" }
             if vim.v.shell_error ~= 0 then
               vim.notify(commit_hash .. " is not a merge commit", vim.log.levels.WARN)
