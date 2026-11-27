@@ -82,20 +82,60 @@ return {
       end,
     })
 
+    -- goto-preview's snacks provider ignores the locations it got and opens `lsp_references` instead, so with 2+
+    -- implementations / type definitions / declarations it listed the symbol's references. Ask through vim.lsp.buf
+    -- (same merged results as gi/gy/gD) and pick among them ourselves; the chosen one opens in a preview float.
+    -- FIXME: report upstream (rmagatti/goto-preview) and drop this once fixed. In lua/goto-preview/lib.lua the
+    -- `snacks` and `fzf_lua` providers are `function(_, _)`: they drop (prompt_title, items) and run their own
+    -- lsp_references source. They date from "add support for more picker providers" (4f4134d), when the pickers
+    -- only served references; "Add picker for multiple implementations" (7659d15) then routed implementation /
+    -- typeDefinition / declaration results (handle_multiple_locations -> open_references_previewer) through the
+    -- same providers. telescope and default use `items`; snacks and fzf_lua should too. Repro: gopls, an
+    -- interface method with 2 implementations, references.provider = "snacks", goto_preview_implementation().
+    local function preview_locations(method, title)
+      return function()
+        vim.lsp.buf[method] {
+          on_list = function(list)
+            local open = function(item)
+              require("goto-preview.lib").open_floating_win(
+                vim.uri_from_fname(item.filename),
+                { item.lnum, item.col - 1 }
+              )
+            end
+            if #list.items == 1 then return open(list.items[1]) end
+            Snacks.picker.pick {
+              title = title,
+              items = vim.tbl_map(
+                function(item)
+                  return {
+                    file = item.filename,
+                    pos = { item.lnum, item.col - 1 },
+                    line = item.text,
+                    text = item.filename .. " " .. item.text,
+                    raw = item,
+                  }
+                end,
+                list.items
+              ),
+              format = "file",
+              confirm = function(picker, item)
+                picker:close()
+                if item then open(item.raw) end
+              end,
+            }
+          end,
+        }
+      end
+    end
+
     -- `gp` + the LSP key for the same lookup (gd/gD/gI/grr/gy); `gh` is a shortcut for the most common one
     local keymaps = {
       ["gh"] = { function() require("goto-preview").goto_preview_definition() end, "Preview Definition" },
       ["gpd"] = { function() require("goto-preview").goto_preview_definition() end, "Preview Definition" },
-      ["gpD"] = { function() require("goto-preview").goto_preview_declaration() end, "Preview Declaration" },
-      ["gpi"] = {
-        function() require("goto-preview").goto_preview_implementation() end,
-        "Preview Implementation",
-      },
+      ["gpD"] = { preview_locations("declaration", "Declarations"), "Preview Declaration" },
+      ["gpi"] = { preview_locations("implementation", "Implementations"), "Preview Implementation" },
       ["gpr"] = { function() require("goto-preview").goto_preview_references() end, "Preview References" },
-      ["gpy"] = {
-        function() require("goto-preview").goto_preview_type_definition() end,
-        "Preview Type Definition",
-      },
+      ["gpy"] = { preview_locations("type_definition", "Type Definitions"), "Preview Type Definition" },
       ["gP"] = { function() require("goto-preview").close_all_win() end, "Close Preview Windows" },
     }
     vim.keymap.set("n", "gp", "<Nop>", { desc = "Goto Preview" })
