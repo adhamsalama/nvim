@@ -20,16 +20,16 @@ local function listed_in_other_tab(bufnr)
   return false
 end
 
--- Remove a buffer from the current tab only: windows in this tab that show it
--- switch to a neighboring tab buffer (or a new empty one), and it leaves `vim.t.bufs`.
+-- Windows in this tab that show the buffer switch to its neighbor in this tab's buffers (the one to its left, else the
+-- next), or a new empty buffer when it's the tab's only one. Never to a buffer of another tab.
 ---@param bufnr integer
-local function detach(bufnr)
+local function replace_in_tab(bufnr)
   local bufs = vim.t.bufs or {}
   local idx = 1
   for i, b in ipairs(bufs) do
     if b == bufnr then idx = i end
   end
-  local others = vim.tbl_filter(function(b) return b ~= bufnr end, bufs)
+  local others = vim.tbl_filter(function(b) return b ~= bufnr and vim.api.nvim_buf_is_valid(b) end, bufs)
   local replacement = others[math.max(idx - 1, 1)]
 
   for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -41,7 +41,12 @@ local function detach(bufnr)
       end
     end
   end
+end
 
+-- Remove a buffer from the current tab only: it leaves the tab's windows and `vim.t.bufs`.
+---@param bufnr integer
+local function detach(bufnr)
+  replace_in_tab(bufnr)
   -- re-read: `enew` may have just added the new empty buffer to this tab
   vim.t.bufs = vim.tbl_filter(function(b) return b ~= bufnr end, vim.t.bufs or {})
   require("astrocore").event "BufsUpdated"
@@ -105,10 +110,20 @@ function M.setup()
   local close = buffer.close
   buffer.close = function(bufnr, force)
     if not bufnr or bufnr == 0 then bufnr = vim.api.nvim_get_current_buf() end
-    if listed_in_other_tab(bufnr) then
-      detach(bufnr)
-    else
-      close(bufnr, force)
+    if listed_in_other_tab(bufnr) then return detach(bufnr) end
+    -- Snacks.bufdelete would show the window's alternate or the most recently used buffer, which can belong to another
+    -- tab (after a session load, the last tab's files are the most recently used): pick from this tab first.
+    local wins = vim.tbl_filter(
+      function(win) return vim.api.nvim_win_get_buf(win) == bufnr end,
+      vim.api.nvim_tabpage_list_wins(0)
+    )
+    replace_in_tab(bufnr)
+    close(bufnr, force)
+    -- the close was cancelled (an unsaved buffer): show it again
+    if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].buflisted then
+      for _, win in ipairs(wins) do
+        if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_set_buf(win, bufnr) end
+      end
     end
   end
 end
