@@ -21,8 +21,8 @@ return {
       { -- in Diffview windows (diff buffers and its panels): whether whitespace changes are ignored
         condition = function() return vim.wo.diff or vim.bo.filetype:match "^Diffview" ~= nil end,
         init = function(self) self.ignored = vim.tbl_contains(vim.opt.diffopt:get(), "iwhiteall") end,
-        provider = function(self) return self.ignored and " 󱁐 ws ignored " or " 󱁐 ws shown " end,
-        hl = function(self) return { fg = "bg", bg = self.ignored and "yellow" or "inactive", bold = true } end,
+        provider = function(self) return self.ignored and " 󱁐 whitespace ignored " or " 󱁐 whitespace shown " end,
+        hl = function(self) return { fg = "bg", bg = self.ignored and "diag_WARN" or "diag_INFO", bold = true } end,
       },
       status.component.fill(),
       status.component.cmd_info(),
