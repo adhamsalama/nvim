@@ -40,6 +40,48 @@ local function open_quickfix()
   if vim.api.nvim_win_is_valid(cur_win) then vim.api.nvim_set_current_win(cur_win) end
 end
 
+-- Pastes the quickfix list into Claude's prompt, unsent, and focuses Claude to say what to do with it. Starts Claude
+-- when it isn't running and pastes once it has connected.
+local function send_quickfix()
+  local qf = vim.fn.getqflist { title = 1, items = 1 }
+  local lines = {}
+  for _, item in ipairs(qf.items) do
+    if item.valid == 1 then
+      local name = item.bufnr > 0 and vim.fn.fnamemodify(vim.api.nvim_buf_get_name(item.bufnr), ":.") or "?"
+      local text = vim.trim(item.text:gsub("%s*\n%s*", " "):gsub("\27", ""))
+      table.insert(lines, ("%s:%d: %s"):format(name, item.lnum, text))
+    end
+  end
+  if #lines == 0 then return vim.notify("The quickfix list is empty", vim.log.levels.WARN) end
+  local title = qf.title ~= "" and (" (" .. qf.title .. ")") or ""
+  local text = ("Quickfix list%s:\n%s\n"):format(title, table.concat(lines, "\n"))
+
+  local terminal = require "claudecode.terminal"
+  local function paste()
+    local buf = terminal.get_active_terminal_bufnr()
+    local chan = buf and vim.bo[buf].channel
+    if not chan or chan == 0 then return vim.notify("Claude isn't running", vim.log.levels.ERROR) end
+    vim.api.nvim_chan_send(chan, "\27[200~" .. text .. "\27[201~") -- bracketed paste: newlines don't submit
+  end
+  local was_running = terminal.get_active_terminal_bufnr() ~= nil
+  terminal.open() -- shows and focuses Claude where it was last, starting it if needed
+  if was_running then return paste() end
+  local claudecode = require "claudecode"
+  local timer = assert(vim.uv.new_timer())
+  local waited = 0
+  timer:start(
+    200,
+    200,
+    vim.schedule_wrap(function()
+      waited = waited + 200
+      if not claudecode.is_claude_connected() and waited < 20000 then return end
+      timer:stop()
+      timer:close()
+      vim.defer_fn(paste, 500) -- the prompt takes a moment after connecting
+    end)
+  )
+end
+
 -- Called over $NVIM by scripts/nvim_quickfix_mcp.lua, an MCP server registered with Claude Code. Claude Code only
 -- exposes a fixed set of claudecode.nvim's IDE tools to the model, so the plugin can't provide this tool itself.
 -- Takes { title?, entries = { { filePath, line, column?, text? } }, open? }.
@@ -143,6 +185,7 @@ return {
     { "<leader>ar", "<cmd>ClaudeCode --resume<cr>", desc = "Resume Claude" },
     { "<leader>am", "<cmd>ClaudeCodeSelectModel<cr>", desc = "Select Claude model" },
     { "<leader>ab", "<cmd>ClaudeCodeAdd %<cr>", desc = "Add current buffer" },
+    { "<leader>aq", send_quickfix, desc = "Send quickfix list to Claude" },
     { "<leader>as", "<cmd>ClaudeCodeSend<cr>", mode = "v", desc = "Send to Claude" },
     {
       "<leader>as",
