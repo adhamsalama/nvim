@@ -1,19 +1,5 @@
 return {
-  {
-    "rebelot/heirline.nvim",
-    opts = function(_, opts)
-      -- Shown in diffview windows (diff buffers and its panels) while whitespace is ignored
-      local component = {
-        condition = function()
-          local in_diffview = vim.wo.diff or vim.bo.filetype:match "^Diffview" ~= nil
-          return in_diffview and vim.tbl_contains(vim.opt.diffopt:get(), "iwhiteall")
-        end,
-        provider = " 󱁐 ignore ws ",
-        hl = { fg = "bg", bg = "yellow", bold = true },
-      }
-      table.insert(opts.statusline, 6, component)
-    end,
-  },
+  -- the statusline's whitespace indicator for <leader>gw is in lua/plugins/heirline.lua
   {
   "sindrets/diffview.nvim",
   keys = {
