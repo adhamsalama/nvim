@@ -65,13 +65,13 @@ return {
     },
   },
 
-  -- Persist the quickfix lists in sessions via `lua/resession/extensions/quickfix_stack.lua`.
+  -- Persist the quickfix lists in sessions via `lua/resession/extensions/quickfix.lua`, which replaces resession's own.
   {
     "stevearc/resession.nvim",
     optional = true,
     opts = function(_, opts)
       opts.extensions = opts.extensions or {}
-      opts.extensions.quickfix_stack = {} -- global, so not for tab-scoped sessions
+      opts.extensions.quickfix = {} -- global, so not for tab-scoped sessions
     end,
   },
 }

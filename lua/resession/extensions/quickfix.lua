@@ -1,6 +1,8 @@
 -- Resession extension that saves and restores the quickfix lists: every list in the stack (:colder / :cnewer, the
--- <Leader>fQ picker) with its title and selected entry, which one is current, and the quickfix windows. resession's own
--- `quickfix` extension keeps only the current list's items. Registered in `lua/plugins/quickfix.lua`.
+-- <Leader>fQ picker) with its title and selected entry, which one is current, and the quickfix windows. Named
+-- `quickfix` to replace resession's own extension, which resession always enables and which keeps only the current
+-- list's items (and names file-less entries after the current buffer): this module comes first on 'runtimepath'.
+-- Registered in `lua/plugins/quickfix.lua`.
 
 local M = {}
 
@@ -26,6 +28,9 @@ end
 
 -- Before the windows load, so a quickfix window opens on the restored list.
 function M.on_pre_load(data)
+  if vim.islist(data) then -- saved by resession's own extension: the current list's items
+    data = { lists = { { title = "", items = data } } }
+  end
   if not data.lists then return end
   vim.fn.setqflist({}, "f") -- drop the lists from before the load
   for _, list in ipairs(data.lists) do
