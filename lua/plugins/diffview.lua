@@ -21,8 +21,20 @@ return {
     { "<leader>gd", "<cmd>DiffviewOpen --imply-local<cr>", desc = "Diff" },
     { "<leader>gf", "<cmd>DiffviewFileHistory %<cr>", desc = "File History" },
     { "<leader>gh", "<cmd>DiffviewFileHistory<cr>", desc = "Repo History" },
+    -- Commits that changed the function around the cursor, or the selected lines (git log -L, follows the lines as
+    -- they move)
     {
       "<leader>gF",
+      function()
+        local first, last = require("utils.function_lines").range()
+        if not first then return vim.notify("No function around the cursor", vim.log.levels.WARN) end
+        require("diffview").file_history({ first, last }, {})
+      end,
+      desc = "Function History",
+    },
+    { "<leader>gF", ":DiffviewFileHistory<cr>", mode = "x", desc = "Line History" },
+    {
+      "<leader>gL",
       function()
         local modes = {
           { flag = "-G", label = "Any changed line containing it" },
