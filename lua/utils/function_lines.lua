@@ -21,6 +21,8 @@ local NOT_FUNC = {
   "keyword",
   "reference",
   "declarator",
+  "table_constructor", -- Lua's `{}`
+  "index", -- Lua's `obj:method` in a call (method_index_expression)
 }
 
 local function is_function(node)
