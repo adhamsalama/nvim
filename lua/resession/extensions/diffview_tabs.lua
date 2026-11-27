@@ -68,6 +68,7 @@ end
 -- from), like leaving the Claude tab; to the last editor tab when that's gone. Tab events on closing the current tab:
 -- TabLeave (the closing tab), TabClosed, TabEnter (the next tab); a tab closed in the background has no TabLeave.
 local came_from = {} ---@type table<integer, integer> Diffview tab -> the tab to go back to
+local opened_from = {} ---@type table<integer, integer> Diffview tab -> the tab its view was opened from
 local leaving ---@type integer? the tab of the last TabLeave, until the TabEnter that follows
 local entered_from ---@type integer? the tab left for the current one
 
@@ -91,6 +92,9 @@ vim.api.nvim_create_autocmd("TabClosed", {
   group = tab_events,
   desc = "Go back to where a closed Diffview tab was entered from",
   callback = function()
+    for tab in pairs(opened_from) do
+      if not vim.api.nvim_tabpage_is_valid(tab) then opened_from[tab] = nil end
+    end
     for tab in pairs(came_from) do
       if not vim.api.nvim_tabpage_is_valid(tab) and tab ~= leaving then came_from[tab] = nil end
     end
@@ -105,6 +109,16 @@ vim.api.nvim_create_autocmd("TabClosed", {
   end,
 })
 
+---The tab gf opens files in from the current Diffview tab: the editor tab its view was opened from, else the editor tab
+---you were last in (lua/resession/extensions/tab_names.lua `editor_tab`). Nil when there's no editor tab.
+---@return integer?
+function M.file_tab()
+  local tab_names = require "resession.extensions.tab_names"
+  local origin = opened_from[vim.api.nvim_get_current_tabpage()]
+  if origin and vim.api.nvim_tabpage_is_valid(origin) and not tab_names.is_plugin_tab(origin) then return origin end
+  return tab_names.editor_tab()
+end
+
 ---Makes the view's tab a plugin tab (lua/resession/extensions/tab_names.lua `is_plugin_tab`): named after the view,
 ---and kept with the plugin tabs on the right by the TabNew handler in lua/plugins/tab-names.lua. Called from diffview's
 ---`view_opened` hook, right after the view's tab opens.
@@ -115,6 +129,7 @@ function M.mark(view)
   vim.t[tab].name = view.session_restore and tab_name(view.session_restore) or "Diffview"
   -- the view's tab was entered (TabEnter) before this hook, from the tab the view was opened in
   came_from[tab] = entered_from or require("resession.extensions.tab_names").editor_tab() or tab
+  opened_from[tab] = entered_from
   vim.cmd.redrawtabline()
 end
 
@@ -176,7 +191,9 @@ local function reopen_here()
   end
   local view_tab = vim.api.nvim_get_current_tabpage()
   if view_tab == tab then return end
-  if came_from[view_tab] and origin then came_from[view_tab] = origin end
+  if came_from[view_tab] and origin then
+    came_from[view_tab], opened_from[view_tab] = origin, origin
+  end
   -- after the TabNew handler has moved the new plugin tab to the end: back right after this tab, which then closes
   vim.schedule(function()
     if not vim.api.nvim_tabpage_is_valid(tab) then return end
