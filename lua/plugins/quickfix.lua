@@ -53,13 +53,25 @@ local function quickfix_history()
 end
 
 return {
-  "AstroNvim/astrocore",
-  opts = {
-    mappings = {
-      n = {
-        ["<Leader>fq"] = { function() require("snacks").picker.qflist() end, desc = "Quickfix list" },
-        ["<Leader>fQ"] = { quickfix_history, desc = "Quickfix history picker" },
+  {
+    "AstroNvim/astrocore",
+    opts = {
+      mappings = {
+        n = {
+          ["<Leader>fq"] = { function() require("snacks").picker.qflist() end, desc = "Quickfix list" },
+          ["<Leader>fQ"] = { quickfix_history, desc = "Quickfix history picker" },
+        },
       },
     },
+  },
+
+  -- Persist the quickfix lists in sessions via `lua/resession/extensions/quickfix_stack.lua`.
+  {
+    "stevearc/resession.nvim",
+    optional = true,
+    opts = function(_, opts)
+      opts.extensions = opts.extensions or {}
+      opts.extensions.quickfix_stack = {} -- global, so not for tab-scoped sessions
+    end,
   },
 }
