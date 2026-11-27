@@ -19,6 +19,8 @@ return {
       desc = "Function History",
     },
     { "<leader>gF", ":DiffviewFileHistory<cr>", mode = "x", desc = "Line History" },
+    -- the current file's functions ranked by how many commits changed them (<C-l> in the picker: their history)
+    { "<leader>gM", function() require("utils.function_churn").pick() end, desc = "Most changed functions" },
     {
       "<leader>gL",
       function()
