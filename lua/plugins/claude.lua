@@ -181,7 +181,17 @@ return {
     { "<leader>aC", function() claude_tab.toggle_dock() end, desc = "Toggle Claude at bottom" },
     -- Shows Claude where it was last (tab or bottom), or leaves it
     { toggle_key, "<cmd>ClaudeCode<cr>", mode = { "n", "i" }, desc = "Toggle Claude" },
-    { "<leader>af", "<cmd>ClaudeCodeFocus<cr>", desc = "Focus Claude" },
+    {
+      "<leader>af",
+      function()
+        local first, last = require("utils.function_lines").range()
+        if not first then return vim.notify("No function around the cursor", vim.log.levels.WARN) end
+        vim.api.nvim_feedkeys(("%dGV%dG"):format(first, last), "nx", false)
+        vim.cmd "ClaudeCodeSend"
+      end,
+      desc = "Send function to Claude",
+    },
+    { "<leader>aF", "<cmd>ClaudeCodeFocus<cr>", desc = "Focus Claude" },
     { "<leader>ar", "<cmd>ClaudeCode --resume<cr>", desc = "Resume Claude" },
     { "<leader>am", "<cmd>ClaudeCodeSelectModel<cr>", desc = "Select Claude model" },
     { "<leader>ab", "<cmd>ClaudeCodeAdd %<cr>", desc = "Add current buffer" },
