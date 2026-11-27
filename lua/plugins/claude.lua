@@ -199,6 +199,14 @@ return {
     { "<leader>as", "<cmd>ClaudeCodeSend<cr>", mode = "v", desc = "Send to Claude" },
     {
       "<leader>as",
+      function()
+        vim.api.nvim_feedkeys("V", "nx", false) -- the same path as a visual send (<Leader>af does it for a function)
+        vim.cmd "ClaudeCodeSend"
+      end,
+      desc = "Send line to Claude",
+    },
+    {
+      "<leader>as",
       "<cmd>ClaudeCodeTreeAdd<cr>",
       desc = "Add file",
       ft = { "NvimTree", "neo-tree", "oil", "minifiles" },
