@@ -24,6 +24,29 @@ return {
         desc = "Move buffer to tab",
       }
 
+      -- >t / <t move the current tab right / left (like >b / <b for buffers), [count] places, within its group: editor
+      -- tabs among editor tabs, plugin tabs among plugin tabs, and the Claude tab stays last.
+      local function move_tab(delta)
+        local tab_names = require "resession.extensions.tab_names"
+        local claude = require("utils.claude_tab").tab()
+        local current = vim.api.nvim_get_current_tabpage()
+        if current == claude then return vim.notify("The Claude tab stays last", vim.log.levels.INFO) end
+        local plugin = tab_names.is_plugin_tab(current)
+        local first, last
+        for i, tab in ipairs(vim.api.nvim_list_tabpages()) do
+          if tab ~= claude and tab_names.is_plugin_tab(tab) == plugin then
+            first, last = first or i, i
+          end
+        end
+        local nr = vim.api.nvim_tabpage_get_number(current)
+        local target = math.max(first, math.min(last, nr + delta))
+        if target == nr then return end
+        -- `:tabmove N` puts the tab after tab N, counted before the move
+        vim.cmd("tabmove " .. (target > nr and target or target - 1))
+      end
+      opts.mappings.n[">t"] = { function() move_tab(vim.v.count1) end, desc = "Move tab right" }
+      opts.mappings.n["<t"] = { function() move_tab(-vim.v.count1) end, desc = "Move tab left" }
+
       -- Keep plugin tabs (by name) to the right of regular tabs, with the Claude tab always last: a new plugin tab
       -- moves to the end (just before the Claude tab when it's open), and a new regular tab moves in front of the
       -- plugin tabs.
