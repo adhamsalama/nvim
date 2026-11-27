@@ -143,19 +143,32 @@ local KEYWORDS = {
 ---@param fn TSNode
 ---@param bufnr integer
 ---@return string
-local function function_name(fn, bufnr)
+---@param source integer|string a buffer, or the text the tree was parsed from
+---@return fun(row: integer): string line the line at a 0-indexed row
+local function line_getter(source)
+  if type(source) == "number" then
+    return function(row) return vim.api.nvim_buf_get_lines(source, row, row + 1, false)[1] or "" end
+  end
+  local lines = vim.split(source, "\n", { plain = true })
+  return function(row) return lines[row + 1] or "" end
+end
+
+---@param fn TSNode
+---@param source integer|string a buffer, or the text the tree was parsed from
+---@param get_line fun(row: integer): string
+---@return string
+local function function_name(fn, source, get_line)
   local nodes = declaration_nodes(fn)
   for _, node in ipairs(nodes) do
     for _, field in ipairs(NAME_FIELDS) do
       local name = node:field(field)[1]
       if name then
-        local text = vim.treesitter.get_node_text(name, bufnr):gsub("%s+", " "):match "^[^(]*" -- C: `foo(int x)`
+        local text = vim.treesitter.get_node_text(name, source):gsub("%s+", " "):match "^[^(]*" -- C: `foo(int x)`
         if vim.trim(text) ~= "" then return vim.trim(text) end
       end
     end
   end
-  local srow = select(1, nodes[#nodes]:range())
-  local line = vim.trim(vim.api.nvim_buf_get_lines(bufnr, srow, srow + 1, false)[1] or "")
+  local line = vim.trim(get_line((nodes[#nodes]:range())))
   local words = vim.split(line:match "^[^=({:]*" or line, "%s+", { trimempty = true })
   while words[1] and vim.tbl_contains(KEYWORDS, words[1]) do
     table.remove(words, 1)
@@ -163,28 +176,46 @@ local function function_name(fn, bufnr)
   return #words > 0 and table.concat(words, " ") or "anonymous function"
 end
 
----Every function, method and function variable in the buffer, as <Leader>af finds them: not callbacks (a function
----passed to a call is part of the function it's written in), with the lines of the declaration each is written in.
----@param bufnr integer?
----@return { name: string, first: integer, last: integer }[] first, last: 1-indexed, inclusive; in buffer order
-function M.functions(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local ok, parser = pcall(vim.treesitter.get_parser, bufnr)
-  if not ok or not parser then return {} end
-  local tree = parser:parse()[1]
-  if not tree then return {} end
+---@alias FunctionLines { name: string, first: integer, last: integer } first, last: 1-indexed, inclusive
+
+---@param root TSNode
+---@param source integer|string
+---@return FunctionLines[]
+local function collect_functions(root, source)
+  local get_line = line_getter(source)
   local found = {}
   local function walk(node)
     if node:named() and is_function(node) and not is_call_arg(node) then -- not keyword tokens (`function`)
       local srow, erow = declaration_rows(node)
-      table.insert(found, { name = function_name(node, bufnr), first = srow + 1, last = erow + 1 })
+      table.insert(found, { name = function_name(node, source, get_line), first = srow + 1, last = erow + 1 })
     end
     for child in node:iter_children() do
       walk(child)
     end
   end
-  walk(tree:root())
+  walk(root)
   return found
+end
+
+---Every function, method and function variable in the buffer, as <Leader>af finds them: not callbacks (a function
+---passed to a call is part of the function it's written in), with the lines of the declaration each is written in.
+---@param bufnr integer?
+---@return FunctionLines[] in buffer order
+function M.functions(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local ok, parser = pcall(vim.treesitter.get_parser, bufnr)
+  local tree = ok and parser and parser:parse()[1]
+  return tree and collect_functions(tree:root(), bufnr) or {}
+end
+
+---The functions of a text (a file's content at some commit), parsed as `lang`.
+---@param text string
+---@param lang string a treesitter language
+---@return FunctionLines[]
+function M.functions_in_text(text, lang)
+  local ok, parser = pcall(vim.treesitter.get_string_parser, text, lang)
+  local tree = ok and parser and parser:parse()[1]
+  return tree and collect_functions(tree:root(), text) or {}
 end
 
 ---The first function (outermost first) in `node`, that isn't a call argument unless `any`, and whose declaration
@@ -248,7 +279,7 @@ function M.pick()
   local first, last = srow + 1, erow + 1
 
   Snacks.picker.lines {
-    title = ("Lines in %s (%d-%d)"):format(function_name(node, bufnr), first, last),
+    title = ("Lines in %s (%d-%d)"):format(function_name(node, bufnr, line_getter(bufnr)), first, last),
     finder = function(opts, ctx)
       return vim.tbl_filter(
         function(item) return item.pos[1] >= first and item.pos[1] <= last end,
