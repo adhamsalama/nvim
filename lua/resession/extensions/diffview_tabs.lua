@@ -1,7 +1,8 @@
 -- Resession extension that brings Diffview tabs back. A session can't restore a view (its windows show diffview://
 -- buffers and panels), so each view remembers the arguments that opened it (`track`, run when diffview loads), the
--- session saves them with the view's tab, and loading reopens each view in that tab's place. Registered in
--- `lua/plugins/diffview.lua`.
+-- session saves them with the view's tab, and the view reopens in that tab the first time you enter it. Not during the
+-- load: a view runs git synchronously, and the startup work still pending (LSP setup starting a process per buffer)
+-- would run nested inside it. Registered in `lua/plugins/diffview.lua`.
 
 local M = {}
 
@@ -46,14 +47,18 @@ function M.track()
 end
 
 function M.on_save()
-  local lib = package.loaded["diffview.lib"] -- no views when diffview never loaded
-  if not lib then return {} end
   local index = {}
   for i, tab in ipairs(vim.api.nvim_list_tabpages()) do
     index[tab] = i
   end
   local views = {}
-  for _, view in ipairs(lib.views) do
+  -- tabs from the last load that were never entered keep their view to reopen
+  for tab, i in pairs(index) do
+    local pending = vim.t[tab].diffview_restore ---@type DiffviewRestore?
+    if pending then table.insert(views, { tab = i, cmd = pending.cmd, args = pending.args }) end
+  end
+  local lib = package.loaded["diffview.lib"] -- no views when diffview never loaded
+  for _, view in ipairs(lib and lib.views or {}) do
     local restore = view.session_restore ---@type DiffviewRestore?
     if restore and index[view.tabpage] then
       table.insert(views, { tab = index[view.tabpage], cmd = restore.cmd, args = restore.args })
@@ -62,58 +67,51 @@ function M.on_save()
   return { views = views }
 end
 
+-- Reopens the view of the current tab, if it has one to reopen: the view opens in a new tab right after this one, which
+-- then closes, so the view takes its place.
+local function reopen_here()
+  local tab = vim.api.nvim_get_current_tabpage()
+  local restore = vim.t[tab].diffview_restore ---@type DiffviewRestore?
+  if not restore then return end
+  vim.t[tab].diffview_restore = nil
+  local diffview = require "diffview"
+  if restore.cmd == "open" then
+    diffview.open(restore.args)
+  else
+    diffview.file_history(nil, restore.args)
+  end
+  if vim.api.nvim_get_current_tabpage() ~= tab and vim.api.nvim_tabpage_is_valid(tab) then
+    pcall(vim.cmd.tabclose, vim.api.nvim_tabpage_get_number(tab))
+  end
+end
+
+local augroup = vim.api.nvim_create_augroup("DiffviewTabsRestore", { clear = true })
+vim.api.nvim_create_autocmd("TabEnter", {
+  group = augroup,
+  desc = "Reopen a Diffview view from the session in this tab",
+  callback = function()
+    local tab = vim.api.nvim_get_current_tabpage()
+    if not vim.t[tab].diffview_restore then return end
+    -- only where you stay: other extensions pass through tabs while a session loads
+    vim.defer_fn(function()
+      if vim.api.nvim_get_current_tabpage() == tab then reopen_here() end
+    end, 100)
+  end,
+})
+
 function M.on_post_load(data)
   local tabpages = vim.api.nvim_list_tabpages()
-  local targets = {}
+  local current = vim.api.nvim_get_current_tabpage()
   for _, view in ipairs(data.views or {}) do
-    if tabpages[view.tab] then table.insert(targets, { tab = tabpages[view.tab], view = view }) end
+    local tab = tabpages[view.tab]
+    if tab then vim.t[tab].diffview_restore = { cmd = view.cmd, args = view.args } end
   end
-  if #targets == 0 then return end
-  local current
-  -- One view at a time: a view keeps loading after it opens (git calls, then its files and folds) and acts on the
-  -- current tab, so the next one opens once it has settled.
-  local function open_next(i)
-    local target = targets[i]
-    if not target then
-      if current and vim.api.nvim_tabpage_is_valid(current) then vim.api.nvim_set_current_tabpage(current) end
-      return
-    end
-    if not vim.api.nvim_tabpage_is_valid(target.tab) then return open_next(i + 1) end
-    vim.api.nvim_set_current_tabpage(target.tab)
-    local diffview = require "diffview"
-    if target.view.cmd == "open" then
-      diffview.open(target.view.args)
-    else
-      diffview.file_history(nil, target.view.args)
-    end
-    local view = require("diffview.lib").get_current_view()
-    -- the view opened in a new tab right after the restored one: it takes that tab's place
-    if vim.api.nvim_get_current_tabpage() ~= target.tab then
-      pcall(vim.cmd.tabclose, vim.api.nvim_tabpage_get_number(target.tab))
-    end
-    if current == target.tab then current = vim.api.nvim_get_current_tabpage() end
-    local waited = 0
-    local function settled()
-      return not view
-        or (view.ready and view.initialized ~= false and not (view.panel and view.panel.updating))
-        or waited >= 10000
-    end
-    local function wait()
-      if settled() then
-        return vim.defer_fn(function() open_next(i + 1) end, 200)
-      end
-      waited = waited + 100
-      vim.defer_fn(wait, 100)
-    end
-    wait()
+  -- the tab current after the load (no TabEnter for it): once the load and the startup work after it are done
+  if vim.t[current].diffview_restore then
+    vim.defer_fn(function()
+      if vim.api.nvim_get_current_tabpage() == current then reopen_here() end
+    end, 1000)
   end
-  -- resession calls this with eventignore=all, and diffview needs its autocmds: open the views once the load is done.
-  -- Deferred past the other extensions' scheduled work (tab_names reopens plugin tabs and picks the current tab): it
-  -- would otherwise run inside diffview's synchronous git calls and change the current tab under the opening view.
-  vim.defer_fn(function()
-    current = vim.api.nvim_get_current_tabpage()
-    open_next(1)
-  end, 100)
 end
 
 return M
