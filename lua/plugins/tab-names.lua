@@ -19,6 +19,10 @@ return {
         end,
         desc = "Rename tab",
       }
+      opts.mappings.n["<Leader>btm"] = {
+        function() require("utils.tab_buffer").move_to_tab() end,
+        desc = "Move buffer to tab",
+      }
 
       -- Keep plugin tabs (by name) to the right of regular tabs, with the Claude tab always last: a new plugin tab
       -- moves to the end (just before the Claude tab when it's open), and a new regular tab moves in front of the

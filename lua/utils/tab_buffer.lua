@@ -81,6 +81,52 @@ function M.prune_orphans()
   end
 end
 
+---Moves the current buffer to another tab, chosen in a tab picker (editor tabs, or a new one): it leaves this tab as
+---with <Leader>c and shows in that tab's current window (else its first file window, else a split) at the same cursor
+---and scroll position.
+function M.move_to_tab()
+  local buf, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+  if vim.bo[buf].buftype ~= "" then return vim.notify("Only file buffers move between tabs", vim.log.levels.WARN) end
+  local view = vim.fn.winsaveview()
+  local origin = vim.api.nvim_get_current_tabpage()
+  local is_plugin_tab = require("resession.extensions.tab_names").is_plugin_tab
+  require("utils.tab_picker").pick {
+    title = "Move " .. vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":t") .. " to tab",
+    exclude = function(tab) return tab == origin or is_plugin_tab(tab) end,
+    new_tab = true,
+    confirm = function(tab)
+      if not (vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_tabpage_is_valid(origin)) then return end
+      if tab and not vim.api.nvim_tabpage_is_valid(tab) then return end
+      vim.api.nvim_set_current_tabpage(origin)
+      if vim.api.nvim_win_is_valid(win) then vim.api.nvim_set_current_win(win) end
+      detach(buf)
+      if tab then
+        vim.api.nvim_set_current_tabpage(tab)
+        local target = vim.api.nvim_get_current_win()
+        local function is_file_win(w)
+          return vim.api.nvim_win_get_config(w).relative == "" and vim.bo[vim.api.nvim_win_get_buf(w)].buftype == ""
+        end
+        if not is_file_win(target) then
+          target = vim.tbl_filter(is_file_win, vim.api.nvim_tabpage_list_wins(tab))[1]
+          if not target then
+            vim.cmd "split"
+            target = vim.api.nvim_get_current_win()
+          end
+          vim.api.nvim_set_current_win(target)
+        end
+        vim.api.nvim_win_set_buf(target, buf)
+      else
+        vim.cmd("tab sbuffer " .. buf) -- the TabNew handler (lua/plugins/tab-names.lua) puts it before the plugin tabs
+        -- the tab opened on the buffer we came from, which it recorded first
+        vim.t.bufs = { buf }
+        require("astrocore").event "BufsUpdated"
+        vim.cmd.redrawtabline()
+      end
+      vim.fn.winrestview(view)
+    end,
+  }
+end
+
 function M.setup()
   -- every tab close (:q / <C-w>c on its last window, :tabclose, :tabonly, plugins closing their
   -- tab) drops that tab's buffers. Deferred so a burst of closes (:tabonly) prunes once, and so it
