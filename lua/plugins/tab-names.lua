@@ -20,9 +20,11 @@ return {
         desc = "Rename tab",
       }
 
-      -- Keep plugin tabs (by name) to the right of regular tabs: a new plugin tab
-      -- moves to the end, and a new regular tab moves in front of the plugin tabs.
+      -- Keep plugin tabs (by name) to the right of regular tabs, with the Claude tab always last: a new plugin tab
+      -- moves to the end (just before the Claude tab when it's open), and a new regular tab moves in front of the
+      -- plugin tabs.
       local is_plugin_tab = require("resession.extensions.tab_names").is_plugin_tab
+      local claude_tab = require "utils.claude_tab"
       opts.autocmds = opts.autocmds or {}
       opts.autocmds.plugin_tabs_right = {
         {
@@ -35,7 +37,13 @@ return {
               -- `tabmove` acts on the current tab; skip if focus moved on (e.g. session restore)
               if tab ~= vim.api.nvim_get_current_tabpage() then return end
               if is_plugin_tab(tab) then
-                vim.cmd "tabmove $"
+                local claude = claude_tab.tab()
+                if claude and claude ~= tab then
+                  -- after the tab before Claude's (`:tabmove N` counts N before the move): right before Claude's
+                  vim.cmd("tabmove " .. (vim.api.nvim_tabpage_get_number(claude) - 1))
+                else
+                  vim.cmd "tabmove $"
+                end
               else
                 local nr = vim.api.nvim_tabpage_get_number(tab)
                 for i, t in ipairs(vim.api.nvim_list_tabpages()) do
