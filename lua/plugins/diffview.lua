@@ -114,6 +114,59 @@ return {
   opts = function(_, opts)
     local actions = require "diffview.actions"
 
+    -- gf, <C-w><C-f> and <C-w>gf open the entry's file at its path in that entry's commit. In a history, that path is
+    -- gone once the file has moved, for every entry before the move (all of them when the function didn't change after
+    -- it). Then open the file the history was opened on instead (its -L range or path argument), at the function's
+    -- first line in a line history (<Leader>gF), in the editor tab. Anything else: diffview's own action.
+    ---@param action function diffview's goto_file action
+    ---@param open "edit"|"split"|"tabedit"
+    local function goto_file_or_history_file(action, open)
+      return function()
+        local view = require("diffview.lib").get_current_view()
+        local file = view and view.infer_cur_file and view:infer_cur_file()
+        local log_options = view and view.panel and view.panel.log_options
+        if not (file and log_options) or vim.uv.fs_stat(file.absolute_path) then return action() end
+        local options, toplevel = log_options.single_file, view.adapter.ctx.toplevel
+        local path, line
+        local trace = options.L and options.L[1]
+        if trace then
+          local first, traced = trace:match "^%-?L?(%d+),%d+:(.+)$"
+          path, line = traced, tonumber(first)
+        elseif options.path_args and #options.path_args == 1 then
+          path = options.path_args[1]
+        end
+        local target = path
+          and vim.iter({ path, vim.fs.joinpath(toplevel, path), vim.fn.fnamemodify(path, ":p") }):find(
+            function(candidate) return vim.startswith(candidate, "/") and vim.uv.fs_stat(candidate) ~= nil end
+          )
+        if not target then return action() end -- diffview's "File does not exist on disk"
+        if open ~= "tabedit" then
+          local tab = require("resession.extensions.tab_names").editor_tab()
+          if tab then vim.api.nvim_set_current_tabpage(tab) else open = "tabedit" end
+        end
+        vim.cmd[open](vim.fn.fnameescape(target))
+        if line then
+          pcall(vim.api.nvim_win_set_cursor, 0, { line, 0 })
+          vim.cmd "normal! zvzz"
+        end
+      end
+    end
+    local goto_file_keys = {
+      { "n", "gf", goto_file_or_history_file(actions.goto_file_edit, "edit"), { desc = "Open the file" } },
+      {
+        "n",
+        "<C-w><C-f>",
+        goto_file_or_history_file(actions.goto_file_split, "split"),
+        { desc = "Open the file in a split" },
+      },
+      {
+        "n",
+        "<C-w>gf",
+        goto_file_or_history_file(actions.goto_file_tab, "tabedit"),
+        { desc = "Open the file in a new tab" },
+      },
+    }
+
     -- The commit of the file history panel's entry under the cursor (or of the file entry's commit). Asked from the
     -- panel, not parsed from the line: a line history (-L, <Leader>gF) lists commits without the `| +a -b |` stats.
     ---@return string?
@@ -266,6 +319,9 @@ return {
         ["<leader>b"] = false, -- Focus files panel in Diffview
         { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
         -- ["<leader>e"] = actions.toggle_files, -- Focus files panel in Diffview
+        goto_file_keys[1],
+        goto_file_keys[2],
+        goto_file_keys[3],
       },
       file_panel = {
         ["<leader>b"] = false, -- Focus files panel in Diffview
@@ -276,6 +332,9 @@ return {
         ["<leader>b"] = false, -- Focus files panel in Diffview
         { "n", "<leader>e", actions.toggle_files, { desc = "Toggle the file panel." } },
         -- ["<leader>e"] = actions.toggle_files,
+        goto_file_keys[1],
+        goto_file_keys[2],
+        goto_file_keys[3],
         {
           "n",
           "gd",
