@@ -1,16 +1,17 @@
 -- Snacks picker over tab pages (<Leader>ft), like the buffers picker. Each tab shows its name (`vim.t.name`, see
 -- lua/plugins/tab-names.lua) or number, the file in its current window and how many buffers its tabline holds; the
--- preview shows that window's buffer at its cursor.
+-- preview shows a copy of that window's buffer at its cursor.
 
 local M = {}
 
--- File buffers preview as themselves. Plugin buffers (the Claude and kubectl terminals, GitGraph's panels) are copied
--- into the preview's scratch buffer instead: showing them in the preview window fires their plugins' BufWinEnter
--- handling, which opened them in a split of the editor window.
+-- Every buffer is copied into the preview's scratch buffer (file buffers with their syntax highlighting), never shown
+-- itself: showing a file buffer in the preview window added it to the current tab's buffers (AstroNvim's per-tab
+-- tracking), and showing a plugin buffer (the Claude and kubectl terminals, GitGraph's panels) fired its plugin's
+-- BufWinEnter handling, which opened it in a split of the editor window.
 ---@param ctx snacks.picker.preview.ctx
 local function preview(ctx)
   local buf = ctx.item.buf
-  if not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].buftype == "" then return Snacks.picker.preview.file(ctx) end
+  if not vim.api.nvim_buf_is_valid(buf) then return ctx.preview:reset() end
   ctx.preview:reset()
   ctx.preview:set_title(ctx.item.label)
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -21,6 +22,9 @@ local function preview(ctx)
     end
   end
   ctx.preview:set_lines(lines)
+  if vim.bo[buf].buftype == "" and vim.bo[buf].filetype ~= "" then
+    ctx.preview:highlight { ft = vim.bo[buf].filetype }
+  end
   local win = ctx.preview.win.win
   if win and vim.api.nvim_win_is_valid(win) and #lines > 0 then
     local row = is_term and #lines or math.min(ctx.item.pos[1], #lines)
