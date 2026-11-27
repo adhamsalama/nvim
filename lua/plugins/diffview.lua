@@ -252,6 +252,8 @@ return {
     end
 
     opts.hooks = {
+      -- a plugin tab: named after the view and kept with the plugin tabs on the right (lua/plugins/tab-names.lua)
+      view_opened = function(view) require("resession.extensions.diffview_tabs").mark(view) end,
       view_leave = snapshot,
       view_enter = function() schedule_restore(150) end,
       diff_buf_win_enter = function()

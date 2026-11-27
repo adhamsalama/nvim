@@ -11,6 +11,11 @@ local GITGRAPH_TAB = "GitGraph" -- gitgraph.nvim's default `tab_name`
 -- Names of the tabs plugins open (`vim.t.name`); every other tab is an editor tab.
 M.plugin_tabs = { [GITGRAPH_TAB] = true, DB = true, kubectl = true, HTTP = true, Claude = true }
 
+---Whether a tab is a plugin's: named after one (`plugin_tabs`), or flagged `vim.t.plugin_tab` by a plugin whose tabs take
+---names of their own (Diffview: `Diff HEAD~2`, `History auth.js`).
+---@param tab integer
+function M.is_plugin_tab(tab) return M.plugin_tabs[vim.t[tab].name or ""] == true or vim.t[tab].plugin_tab == true end
+
 ---@param opts resession.Extension.OnSaveOpts
 function M.on_save(opts)
   -- a tab-scoped session only holds its own tab
@@ -36,7 +41,7 @@ local function in_tab(tab, fn)
 end
 
 ---@param tab integer
-local function is_editor_tab(tab) return vim.api.nvim_tabpage_is_valid(tab) and not M.plugin_tabs[vim.t[tab].name or ""] end
+local function is_editor_tab(tab) return vim.api.nvim_tabpage_is_valid(tab) and not M.is_plugin_tab(tab) end
 
 function M.on_post_load(data)
   local tabpages = vim.api.nvim_list_tabpages()

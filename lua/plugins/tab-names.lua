@@ -22,7 +22,7 @@ return {
 
       -- Keep plugin tabs (by name) to the right of regular tabs: a new plugin tab
       -- moves to the end, and a new regular tab moves in front of the plugin tabs.
-      local plugin_tabs = require("resession.extensions.tab_names").plugin_tabs
+      local is_plugin_tab = require("resession.extensions.tab_names").is_plugin_tab
       opts.autocmds = opts.autocmds or {}
       opts.autocmds.plugin_tabs_right = {
         {
@@ -34,13 +34,13 @@ return {
             vim.schedule(function()
               -- `tabmove` acts on the current tab; skip if focus moved on (e.g. session restore)
               if tab ~= vim.api.nvim_get_current_tabpage() then return end
-              if plugin_tabs[vim.t[tab].name] then
+              if is_plugin_tab(tab) then
                 vim.cmd "tabmove $"
               else
                 local nr = vim.api.nvim_tabpage_get_number(tab)
                 for i, t in ipairs(vim.api.nvim_list_tabpages()) do
                   if i >= nr then break end
-                  if plugin_tabs[vim.t[t].name] then
+                  if is_plugin_tab(t) then
                     vim.cmd("tabmove " .. (i - 1))
                     break
                   end
